@@ -11,6 +11,7 @@ const WATCH_SCRIPT = `(function () { try {
   function check() {
     var visible = isVisible(document.querySelector(SELECTOR));
     if (visible && !wasVisible) {
+      document.querySelectorAll('#bookingResults .mi-panel').forEach(function (el) { el.remove(); });
       var showID = (typeof Booking !== 'undefined' && Booking && Booking.currentShow != null) ? Number(Booking.currentShow) : null;
       plugins.send('match-impact', '${CHANNEL}', { showID: isFinite(showID) ? showID : null });
     }
@@ -37,7 +38,11 @@ function createSummaryWatcher({ ui, ipc, onSummaryShown, logger }) {
     Promise.resolve(ui.executeJS(STOP_SCRIPT)).catch((e) => logger.error('summaryWatcher.stop', e));
   }
 
-  return { start, stop };
+  function reinject() {
+    Promise.resolve(ui.executeJS(WATCH_SCRIPT)).catch((e) => logger.error('summaryWatcher.reinject', e));
+  }
+
+  return { start, stop, reinject };
 }
 
 module.exports = { createSummaryWatcher };

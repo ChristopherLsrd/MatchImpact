@@ -11,6 +11,7 @@ function purgeModuleCache() {
 }
 
 let teardown = null;
+let reinject = null;
 
 module.exports = {
   activate(api) {
@@ -48,6 +49,11 @@ module.exports = {
     watcher.start();
     page.start();
 
+    reinject = () => {
+      watcher.reinject();
+      page.reinject();
+    };
+
     teardown = () => {
       watcher.stop();
       page.stop();
@@ -61,9 +67,14 @@ module.exports = {
     logger.log('Match Impact activé.');
   },
 
+  onRendererLoad() {
+    if (reinject) reinject();
+  },
+
   deactivate() {
     if (!teardown) return;
     try { teardown(); } catch (e) { /* le jeu nettoie le reste */ }
     teardown = null;
+    reinject = null;
   },
 };
