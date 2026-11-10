@@ -111,3 +111,70 @@ test('résume les segments', () => {
   const r = computeRecap(snap([worker(1)]), snap([worker(1)]), [seg('A', [1], 'Angle', 72)], OPTS);
   assert.deepEqual(r.segments, [{ name: 'A', type: 'Angle', rating: 72 }]);
 });
+
+function rel(a, b, value) {
+  return { worker1: a, worker2: b, value };
+}
+
+test('rapporte une relation modifiée entre lutteurs du même segment', () => {
+  const r = computeRecap(
+    snap([worker(1), worker(2)], [rel(2, 1, 40)]),
+    snap([worker(1), worker(2)], [rel(1, 2, 45)]),
+    [seg('A', [1, 2])],
+    OPTS,
+  );
+  assert.deepEqual(r.relations, [
+    { worker1: 1, name1: 'Ring1', worker2: 2, name2: 'Ring2', before: 40, after: 45, delta: 5 },
+  ]);
+});
+
+test('une relation absente avant vaut 0', () => {
+  const r = computeRecap(snap([worker(1), worker(2)]), snap([worker(1), worker(2)], [rel(1, 2, -3)]), [seg('A', [1, 2])], OPTS);
+  assert.equal(r.relations[0].before, 0);
+  assert.equal(r.relations[0].delta, -3);
+});
+
+test('ignore une paire qui ne partage aucun segment', () => {
+  const r = computeRecap(
+    snap([worker(1), worker(3)], [rel(1, 3, 10)]),
+    snap([worker(1), worker(3)], [rel(1, 3, 30)]),
+    [seg('A', [1]), seg('B', [3])],
+    OPTS,
+  );
+  assert.deepEqual(r.relations, []);
+});
+
+test('une paire présente dans deux segments est rapportée une fois', () => {
+  const r = computeRecap(
+    snap([worker(1), worker(2)], [rel(1, 2, 0)]),
+    snap([worker(1), worker(2)], [rel(1, 2, 8)]),
+    [seg('A', [1, 2]), seg('B', [2, 1])],
+    OPTS,
+  );
+  assert.equal(r.relations.length, 1);
+});
+
+test('n\'inclut pas les relations si le groupe est désactivé', () => {
+  const r = computeRecap(
+    snap([worker(1), worker(2)], [rel(1, 2, 0)]),
+    snap([worker(1), worker(2)], [rel(1, 2, 8)]),
+    [seg('A', [1, 2])],
+    { groups: { ...ALL, relationships: false }, minDelta: 0.5 },
+  );
+  assert.deepEqual(r.relations, []);
+});
+
+test('ignore une relation sous le seuil', () => {
+  const r = computeRecap(
+    snap([worker(1), worker(2)], [rel(1, 2, 10)]),
+    snap([worker(1), worker(2)], [rel(1, 2, 10)]),
+    [seg('A', [1, 2])],
+    OPTS,
+  );
+  assert.deepEqual(r.relations, []);
+});
+
+test('ignore une paire dont un lutteur est absent de la photo de départ', () => {
+  const r = computeRecap(snap([worker(1)]), snap([worker(1), worker(9)], [rel(1, 9, 20)]), [seg('A', [1, 9])], OPTS);
+  assert.deepEqual(r.relations, []);
+});

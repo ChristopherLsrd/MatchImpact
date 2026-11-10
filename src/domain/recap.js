@@ -77,6 +77,48 @@ function computeWorkers(beforeById, afterById, card, options) {
   return workers;
 }
 
+function relationKey(a, b) {
+  return a < b ? `${a}-${b}` : `${b}-${a}`;
+}
+
+function relationMap(relations) {
+  const map = new Map();
+  for (const r of relations) {
+    const key = relationKey(r.worker1, r.worker2);
+    if (!map.has(key)) map.set(key, toNumber(r.value));
+  }
+  return map;
+}
+
+function computeRelations(before, after, segments, card, beforeById, options) {
+  if (!options.groups.relationships) return [];
+  const beforeValues = relationMap(before.relations);
+  const afterValues = relationMap(after.relations);
+  const seen = new Set();
+  const relations = [];
+  for (const segment of segments) {
+    const ids = segment.workers.map((w) => w.workerID).filter((id) => beforeById.has(id));
+    for (let i = 0; i < ids.length; i += 1) {
+      for (let j = i + 1; j < ids.length; j += 1) {
+        const a = Math.min(ids[i], ids[j]);
+        const b = Math.max(ids[i], ids[j]);
+        const key = relationKey(a, b);
+        if (a === b || seen.has(key)) continue;
+        seen.add(key);
+        const beforeValue = beforeValues.has(key) ? beforeValues.get(key) : 0;
+        const afterValue = afterValues.has(key) ? afterValues.get(key) : 0;
+        const delta = afterValue - beforeValue;
+        if (!isReported(delta, options.minDelta)) continue;
+        relations.push({
+          worker1: a, name1: card.names.get(a), worker2: b, name2: card.names.get(b),
+          before: round1(beforeValue), after: round1(afterValue), delta: round1(delta),
+        });
+      }
+    }
+  }
+  return relations;
+}
+
 /**
  * Compare deux photos et produit le récap d'un show.
  * @returns {{segments: Array, workers: Array, relations: Array}}
@@ -88,7 +130,7 @@ function computeRecap(before, after, segments, options) {
   return {
     segments: segments.map((s) => ({ name: s.name, type: s.type, rating: s.rating })),
     workers: computeWorkers(beforeById, afterById, card, options),
-    relations: [],
+    relations: computeRelations(before, after, segments, card, beforeById, options),
   };
 }
 
