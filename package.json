@@ -1,0 +1,10 @@
+{
+  "name": "match-impact",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Plugin Pro Wrestling Sim : récap des stats modifiées en fin de show.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "UNLICENSED"
+}
