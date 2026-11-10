@@ -1,5 +1,10 @@
 'use strict';
 const { renderPanel, renderFloating, resolveAvatarsJs, RECAP_CSS } = require('../presentation/recapHtml');
+const { resolveLocale } = require('../presentation/i18n');
+
+const LOCALE_SCRIPT = '(function () { try {'
+  + " return (typeof I18n !== 'undefined' && I18n && I18n.locale) ? String(I18n.locale) : null;"
+  + ' } catch (e) { return null; } })();';
 
 function summaryScript(html) {
   return '(function () { try {'
@@ -23,21 +28,31 @@ function floatingScript(html) {
 
 function createGameRecapView(ui, logger) {
   ui.injectCSS(RECAP_CSS);
+  let locale = 'en';
+
+  function setLocale(value) {
+    if (typeof value === 'string' && value.trim()) locale = resolveLocale(value);
+  }
+
+  function refreshLocale() {
+    Promise.resolve(ui.executeJS(LOCALE_SCRIPT))
+      .then(setLocale)
+      .catch((e) => logger.error('refreshLocale', e));
+  }
 
   function showFloating(recap) {
-    Promise.resolve(ui.executeJS(floatingScript(renderFloating(recap))))
+    Promise.resolve(ui.executeJS(floatingScript(renderFloating(recap, locale))))
       .catch((e) => logger.error('showFloating', e));
   }
 
-  function showInSummary(recap) {
-    Promise.resolve(ui.executeJS(summaryScript(renderPanel(recap))))
+  function showInSummary(recap, value) {
+    setLocale(value);
+    Promise.resolve(ui.executeJS(summaryScript(renderPanel(recap, locale))))
       .then((inserted) => { if (inserted !== true) showFloating(recap); })
       .catch((e) => { logger.error('showInSummary', e); showFloating(recap); });
   }
 
-  function setLocale() {}
-
-  return { showInSummary, showFloating, setLocale };
+  return { showInSummary, showFloating, setLocale, refreshLocale };
 }
 
 module.exports = { createGameRecapView };
