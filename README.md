@@ -6,6 +6,8 @@ Le récap porte sur l'ensemble du show : il compare l'état des lutteurs avant e
 
 Le plugin est en lecture seule : il n'écrit jamais en base et ne modifie pas le jeu.
 
+Le plugin s'affiche en français si le jeu est en français, et en anglais pour toutes les autres langues.
+
 ## Fonctionnement
 
 - **Avant le show** (`show:started`) : le plugin prend une photo des stats de ton roster.
@@ -16,6 +18,8 @@ Le plugin est en lecture seule : il n'écrit jamais en base et ne modifie pas le
 Seuls les shows que tu lances depuis ton écran de booking sont suivis : le jeu ne signale pas le début des shows des promotions IA.
 
 ## Réglages
+
+Les réglages se modifient dans la page **Match Impact** du menu latéral, bouton **⚙ Réglages** en haut de la liste. Chaque changement est enregistré tout de suite et s'applique dès le show suivant.
 
 | Réglage | Défaut | Rôle |
 |---|---|---|
@@ -55,5 +59,6 @@ New-Item -ItemType Junction -Path "$env:APPDATA\ProWrestlingSimulator\plugins\ma
 
 - [x] Cahier des charges, design et plan
 - [x] Récap de fin de show, panneau en cards, photos des lutteurs
-- [x] Page Historique et réglages
+- [x] Page Historique et écran de réglages
+- [x] Anglais et français selon la langue du jeu (1.1.0)
 - [ ] Test complet en jeu : panneau, historique, désactivation, rechargement à chaud
