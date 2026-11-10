@@ -58,6 +58,16 @@ test('convertit une ligne en WorkerRow', () => {
   assert.deepEqual(Object.keys(w.stats).sort(), STATS.map((s) => s.key).sort());
 });
 
+test('lit les photos du lutteur et du contrat', () => {
+  const query = fakeQuery([[row(3, { picture: 'Amale.png', contractPicture: '' }), row(4)], []]);
+  const [w3, w4] = createSqlRosterReader(query).readRoster(190).workers;
+  assert.match(query.calls[0].sql, /w\.picture, c\.contractPicture/);
+  assert.equal(w3.picture, 'Amale.png');
+  assert.equal(w3.contractPicture, null);
+  assert.equal(w4.picture, null);
+  assert.equal(w4.contractPicture, null);
+});
+
 test('garde un seul WorkerRow par lutteur', () => {
   const query = fakeQuery([[row(3), row(3, { name: 'doublon' })], []]);
   const snapshot = createSqlRosterReader(query).readRoster(190);

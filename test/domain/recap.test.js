@@ -102,6 +102,18 @@ test('ne signale pas une blessure déjà présente avant le show', () => {
   assert.equal(r.workers[0].injury, null);
 });
 
+test('recopie les photos de la photo après le show', () => {
+  const r = recapFor({}, {}, OPTS, {}, { picture: 'A.png', contractPicture: 'C.png' });
+  assert.equal(r.workers[0].picture, 'A.png');
+  assert.equal(r.workers[0].contractPicture, 'C.png');
+});
+
+test('photos absentes : null', () => {
+  const r = recapFor({}, {});
+  assert.equal(r.workers[0].picture, null);
+  assert.equal(r.workers[0].contractPicture, null);
+});
+
 test('prend le nom affiché dans le card', () => {
   const r = recapFor({}, {});
   assert.equal(r.workers[0].name, 'Ring1');

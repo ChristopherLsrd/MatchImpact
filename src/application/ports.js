@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * @typedef {{workerID:number,name:string,stats:Object<string,number|null>,injuryType:string|null,injuryHealDate:string|null}} WorkerRow
+ * @typedef {{workerID:number,name:string,stats:Object<string,number|null>,injuryType:string|null,injuryHealDate:string|null,picture?:string|null,contractPicture?:string|null}} WorkerRow
  * @typedef {{worker1:number,worker2:number,value:number}} Relation
  * @typedef {{workers:WorkerRow[],relations:Relation[]}} Snapshot
  * @typedef {{segmentID:number|null,name:string,type:string,rating:number|null,workers:{workerID:number,name:string}[]}} Segment
