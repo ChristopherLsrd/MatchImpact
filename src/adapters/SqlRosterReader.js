@@ -6,13 +6,14 @@ const STAT_COLUMNS = STATS.map((s) => `${s.table === 'contracts' ? 'c' : 'w'}.${
 const SQL = Object.freeze({
   SELECT_WORKERS: `SELECT w.workerID, w.name, w.injuryType, w.injuryHealDate, ${STAT_COLUMNS.join(', ')} `
     + 'FROM workers w JOIN contracts c ON c.workerID = w.workerID',
+  ORDER_WORKERS: 'ORDER BY w.workerID, c.contractID',
   CARD: 'SELECT s.segmentID, s.segmentType, s.segmentName, s.rating, o.workerID, '
     + "COALESCE(NULLIF(o.workerName, ''), c.contractName, w.name) AS workerName "
     + 'FROM segments s JOIN opponents o ON o.segmentID = s.segmentID '
     + 'LEFT JOIN contracts c ON c.contractID = o.contractID '
     + 'LEFT JOIN workers w ON w.workerID = o.workerID '
     + 'WHERE s.showID = ? '
-    + 'ORDER BY s.segmentorder, s.segmentID, o.opponentSet',
+    + 'ORDER BY s.segmentorder, s.segmentID, (o.opponentSet < 0), o.opponentSet, o.opponentID',
   LATEST_WITH_DATE: 'SELECT i.instanceID FROM eventinstance i JOIN events e ON e.eventID = i.eventID '
     + 'WHERE e.promotionID = ? AND i.complete = 1 AND i.airDate <= ? '
     + 'ORDER BY i.airDate DESC, i.instanceID DESC LIMIT 1',
@@ -66,14 +67,14 @@ function createSqlRosterReader(query) {
   }
 
   function readRoster(promotionID) {
-    const workers = uniqueWorkers(query(`${SQL.SELECT_WORKERS} WHERE c.promotionID = ? AND c.expired = 0`, [promotionID]));
+    const workers = uniqueWorkers(query(`${SQL.SELECT_WORKERS} WHERE c.promotionID = ? AND c.expired = 0 ${SQL.ORDER_WORKERS}`, [promotionID]));
     return { workers, relations: readRelations(workers.map((w) => w.workerID)) };
   }
 
   function readWorkers(ids, promotionID) {
     if (!Array.isArray(ids) || ids.length === 0) return [];
     return uniqueWorkers(query(
-      `${SQL.SELECT_WORKERS} WHERE c.promotionID = ? AND c.expired = 0 AND w.workerID IN (${placeholders(ids.length)})`,
+      `${SQL.SELECT_WORKERS} WHERE c.promotionID = ? AND c.expired = 0 AND w.workerID IN (${placeholders(ids.length)}) ${SQL.ORDER_WORKERS}`,
       [promotionID, ...ids],
     ));
   }

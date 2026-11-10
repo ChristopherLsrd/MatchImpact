@@ -184,3 +184,24 @@ test('readOptions remplace un seuil invalide par 0.5', () => {
   assert.equal(readOptions(fakes.createFakeSettings({ minDelta: -1 })).minDelta, 0.5);
   assert.equal(readOptions(fakes.createFakeSettings({ minDelta: 'x' })).minDelta, 0.5);
 });
+
+test('un échec d\'écriture de l\'historique ne masque pas le panneau (écran de fin)', () => {
+  const { tracker, view, history, logger } = setup();
+  history.save = () => { throw new Error('disque plein'); };
+  tracker.onShowStarted(STARTED);
+  tracker.onSummaryShown({ showID: 77 });
+  assert.equal(view.summary.length, 1);
+  assert.equal(logger.errors.length, 1);
+  assert.equal(logger.errors[0][0], 'archive');
+});
+
+test('un échec d\'écriture de l\'historique ne masque pas le panneau (show:ended)', () => {
+  const { tracker, view, history, logger } = setup();
+  history.save = () => { throw new Error('disque plein'); };
+  tracker.onShowStarted(STARTED);
+  tracker.onShowEnded({ showID: 77 });
+  assert.equal(view.floating.length, 1);
+  assert.equal(logger.errors.length, 1);
+  assert.equal(logger.errors[0][0], 'archive');
+  assert.equal(tracker.hasSnapshot(), false);
+});
