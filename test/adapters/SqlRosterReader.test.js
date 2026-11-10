@@ -122,3 +122,18 @@ test('findLatestCompletedShow sans date, et sans résultat', () => {
   assert.deepEqual(query.calls[0].params, [190]);
   assert.doesNotMatch(query.calls[0].sql, /airDate <= \?/);
 });
+
+test('la requête de carte liste les compétiteurs d\'abord, avec départage stable', () => {
+  const query = fakeQuery([[]]);
+  createSqlRosterReader(query).readCard(5);
+  assert.match(query.calls[0].sql, /ORDER BY s\.segmentorder, s\.segmentID, \(o\.opponentSet < 0\), o\.opponentSet, o\.opponentID$/);
+});
+
+test('les lectures de workers sont triées de façon stable', () => {
+  const query = fakeQuery([[], []]);
+  const reader = createSqlRosterReader(query);
+  reader.readRoster(190);
+  reader.readWorkers([3], 190);
+  assert.match(query.calls[0].sql, /WHERE c\.promotionID = \? AND c\.expired = 0 ORDER BY w\.workerID, c\.contractID$/);
+  assert.match(query.calls[1].sql, /w\.workerID IN \(\?\) ORDER BY w\.workerID, c\.contractID$/);
+});

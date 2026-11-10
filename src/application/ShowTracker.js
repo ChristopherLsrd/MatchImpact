@@ -71,8 +71,12 @@ function createShowTracker({ roster, history, view, settings, gameState, logger 
   }
 
   function archive(recap) {
-    const max = Number(settings.get('historySize')) || DEFAULT_HISTORY_SIZE;
-    history.save(addToHistory(history.load(), recap, max));
+    try {
+      const max = Number(settings.get('historySize')) || DEFAULT_HISTORY_SIZE;
+      history.save(addToHistory(history.load(), recap, max));
+    } catch (e) {
+      logger.error('archive', e);
+    }
   }
 
   function onShowStarted(data) {
@@ -103,8 +107,8 @@ function createShowTracker({ roster, history, view, settings, gameState, logger 
       if (showID === null) return;
       const recap = buildRecap(showID, roster.readCard(showID));
       current.recapDone = true;
-      archive(recap);
       if (settings.get('showEndOfShowPanel')) view.showInSummary(recap);
+      archive(recap);
     } catch (e) {
       logger.error('summary-shown', e);
     }
@@ -117,8 +121,8 @@ function createShowTracker({ roster, history, view, settings, gameState, logger 
       const segments = showID !== null ? roster.readCard(showID) : segmentsFromEvent(data && data.segments);
       const recap = buildRecap(showID, segments);
       current.recapDone = true;
-      archive(recap);
       if (settings.get('showEndOfShowPanel')) view.showFloating(recap);
+      archive(recap);
     } catch (e) {
       logger.error('show:ended', e);
     } finally {
