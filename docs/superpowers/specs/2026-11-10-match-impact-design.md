@@ -109,7 +109,8 @@ Le plugin tourne dans le processus principal (Node, CommonJS) : `index.js` charg
 ### 2. Détection de l'écran récapitulatif
 
 - Dans `activate`, l'adapter `summaryWatcher` injecte un script par `api.ui.executeJS`, enveloppé dans `try/catch`. Il crée un `MutationObserver` sur `document.body` (`childList`, `subtree`, `attributes` filtré sur `style`), stocké dans `window.__matchImpactObserver`. À chaque mutation, il relit `#bookingResults .bookingResultsFinalSummary` et compare son état visible à l'état précédent. Observer `body` plutôt que l'élément lui-même résiste au cas où le jeu recrée la page de résultats.
-- Quand l'écran passe de masqué à visible, il appelle `plugins.send('match-impact', 'summary-shown', { showID })`. `showID` vaut `Booking.currentShow` si cette variable existe, sinon `null`.
+- Quand l'écran passe de masqué à visible, il supprime d'abord les éventuels `#bookingResults .mi-panel` (la page `#bookingResults` persiste toute la session : sans ce nettoyage, le panneau du show précédent resterait affiché sous le nouveau récap), puis il appelle `plugins.send('match-impact', 'summary-shown', { showID })`. `showID` vaut `Booking.currentShow` si cette variable existe, sinon `null`. Le canal IPC est `summary-shown`.
+- Au rechargement du renderer, le jeu appelle l'export `onRendererLoad` du plugin : `index.js` le fait relancer les deux scripts injectés (observateur et définition de `MatchImpactPage`) par `reinject()` de `summaryWatcher` et `historyPage`, sans réenregistrer les handlers IPC.
 - Les callbacks d'un `MutationObserver` s'exécutent après la fin de la fonction synchrone `showSummaryPage()`, donc après l'écriture en base. À vérifier lors du test réel.
 
 ### 3. `summary-shown` → récap
@@ -118,17 +119,17 @@ Le plugin tourne dans le processus principal (Node, CommonJS) : `index.js` charg
 
 1. Il ne fait rien s'il n'y a pas de photo de départ, ou si le récap de ce show a déjà été produit.
 2. Il détermine les participants avec `RosterReader.readCard(showID)` (ou `findLatestCompletedShow` si `showID` est absent) :
-   - si `showID` est fourni : `segments` (`showID = ?`, triés par `segmentorder`) jointe à `opponents`, en excluant les lutteurs au bord du ring (`opponentSet >= 0`, comme `endShow`) ;
+   - si `showID` est fourni : `segments` (`showID = ?`) jointe à `opponents`, sans filtre sur `opponentSet`. Les participants qui ne combattent pas (`opponentSet = -1`, managers) sont donc inclus ; ils sont listés après les compétiteurs de leur segment : `ORDER BY s.segmentorder, s.segmentID, (o.opponentSet < 0), o.opponentSet, o.opponentID` (`opponentID` sert de départage stable, comme le `order by o.opponentSet, o.opponentID` du jeu) ;
    - sinon : le dernier show complet de la promotion à la date du show ou avant, `SELECT i.instanceID FROM eventinstance i JOIN events e ON e.eventID = i.eventID WHERE e.promotionID = ? AND i.complete = 1 AND i.airDate <= ? ORDER BY i.airDate DESC, i.instanceID DESC LIMIT 1` (`complete = 1` est écrit par `showSummaryPage` juste après les stats ; l'`instanceID` seul ne suffit pas, vérifié sur une sauvegarde réelle).
    - Résultat : la liste des segments dans l'ordre du card, avec pour chacun nom, type, note et lutteurs.
 3. Il relit (`readWorkers(ids, promotionID)`, `readRelations(ids)`) les mêmes colonnes pour les participants (une requête `WHERE workerID IN (…)`) et les relations entre participants d'un même segment.
 4. Il appelle `computeRecap(before, after, card, options)` du domaine, `options` étant lu dans `Settings`.
-5. Si `showEndOfShowPanel` est actif, il appelle `RecapView.showInSummary(recap)`. L'adapter `GameRecapView` produit le HTML avec `presentation/recapHtml.js` et l'insère dans `#bookingResults .br-summary-side` par `api.ui.executeJS`, avec un élément marqué `data-plugin-id="match-impact"`. `widgets.inject` n'est pas utilisé : le guide ne dit pas s'il agit sur une page déjà affichée. Si la colonne est introuvable, le script renvoie `false` et l'adapter affiche le panneau flottant à la place.
-6. Il archive : `HistoryStore.save(addToHistory(HistoryStore.load(), recap, historySize))`.
+5. Si `showEndOfShowPanel` est actif, il appelle `RecapView.showInSummary(recap)`, **avant** l'archivage : un échec d'écriture de l'historique ne doit jamais masquer le panneau. L'adapter `GameRecapView` produit le HTML avec `presentation/recapHtml.js` et l'insère dans `#bookingResults .br-summary-side` par `api.ui.executeJS`, avec un élément marqué `data-plugin-id="match-impact"`. `widgets.inject` n'est pas utilisé : le guide ne dit pas s'il agit sur une page déjà affichée. Si la colonne est introuvable, le script renvoie `false` et l'adapter affiche le panneau flottant à la place.
+6. Il archive : `HistoryStore.save(addToHistory(HistoryStore.load(), recap, historySize))`, dans son propre `try/catch` (erreur journalisée sous `archive`).
 
 ### 4. `show:ended` → filet de sécurité
 
-- Si le récap de ce show existe déjà, le handler ne fait rien de plus. Sinon (détection ratée), il produit le récap à partir de `event.data.segments` et `event.data.showID`, l'archive et appelle `RecapView.showFloating(recap)`, qui l'affiche dans un panneau flottant ouvrable et refermable (style `event-logger`).
+- Si le récap de ce show existe déjà, le handler ne fait rien de plus. Sinon (détection ratée), il produit le récap à partir de `event.data.segments` et `event.data.showID`, appelle `RecapView.showFloating(recap)`, qui l'affiche dans un panneau flottant ouvrable et refermable (style `event-logger`), puis l'archive (même ordre : vue avant archivage).
 - Dans tous les cas, la photo de départ est effacée.
 
 ## Stats suivies (`src/domain/stats.js`)
@@ -176,16 +177,16 @@ Règles :
 
 - C'est un `div.panel` avec un titre « Match Impact » et un bouton pour replier ou déplier, puis un `div.panelContents` à hauteur maximale avec défilement.
 - Une carte par lutteur : son nom, ses segments en sous-titre, puis une ligne par stat modifiée : `Entertainment   62.0 → 63.5   ▲ +1.5`.
-- Une section « Relations » liste les paires modifiées : `A ↔ B   40 → 45   ▲ +5`.
+- Une section « Relations » liste les paires modifiées : `A ↔ B   40 → 45   ▲ +5`. Dans le code actuel du jeu, les relations ne sont pas écrites pendant un show (seuls les événements aléatoires et les éditeurs les modifient) : cette section sera donc le plus souvent vide. Elle est conservée à la demande de l'utilisateur.
 - La couleur suit l'effet sur le lutteur : `var(--positive-effect)` pour une bonne nouvelle, `var(--negative-effect)` pour une mauvaise. Pour `fatigue`, une hausse est une mauvaise nouvelle. Une blessure s'affiche en badge `var(--alert)`.
 - Le CSS injecté (`api.ui.injectCSS`) ne contient que de la mise en page et des variables du thème, sans couleur codée en dur. Toutes les classes sont préfixées `mi-`.
 - Tout le texte issu de la base (noms, types de blessure) est échappé.
 
 ### Page Historique
 
-- Elle est créée par `api.ui.addPage({ id: 'matchImpactPage', title: 'Match Impact', initFunction: 'MatchImpactPage' })` et `api.ui.addSideMenuItem({ pageId: 'matchImpactPage', label: 'Match Impact', section: 'bottom' })`.
-- `window.MatchImpactPage.init()` appelle `plugins.invoke('match-impact', 'get-history')` pour récupérer la liste des récaps.
-- La page utilise la mise en page `leftRightSplit` : à gauche la liste des shows (date, nom), à droite le récap du show choisi, avec le même rendu que le panneau. Pour éviter de dupliquer le rendu, le HTML est produit côté plugin : `plugins.invoke('match-impact', 'render-recap', index)` appelle `HistoryQueries.getRecap(index)` puis `recapHtml`.
+- Elle est créée par `api.ui.addPage({ id: 'matchImpactPage', title: 'Match Impact', backButton: 'mainOfficePage', initFunction: 'MatchImpactPage', html })` et `api.ui.addSideMenuItem({ pageId: 'matchImpactPage', label: 'Match Impact', section: 'bottom', svgIcon })`.
+- `window.MatchImpactPage.init()` appelle `plugins.invoke('match-impact', 'history-list-html')` pour récupérer le HTML de la liste des récaps.
+- La page utilise la mise en page `leftRightSplit` : à gauche la liste des shows (date, nom), à droite le récap du show choisi, avec le même rendu que le panneau. Pour éviter de dupliquer le rendu, le HTML est produit côté plugin : `plugins.invoke('match-impact', 'recap-html', index)` appelle `HistoryQueries.getRecap(index)` puis `recapHtml` ; une erreur de rendu renvoie « Récap illisible. » et est journalisée.
 
 ## Historique (`src/domain/history.js`, `src/adapters/StorageHistoryStore.js`)
 
