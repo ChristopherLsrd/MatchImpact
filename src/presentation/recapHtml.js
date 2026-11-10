@@ -166,6 +166,54 @@ function resolveAvatarsJs(rootExpr) {
 })(${rootExpr});`;
 }
 
+// Ordre des réglages dans le formulaire.
+const SETTINGS_BLOCKS = [
+  { title: 'settings.tracked', keys: ['trackPopularity', 'trackMomentumMorale', 'trackCondition', 'trackSkills', 'trackRelationships'] },
+  { title: 'settings.display', keys: ['showEndOfShowPanel', 'onlyMyPromotion', 'minDelta', 'historySize'] },
+];
+const SETTING_STEPS = { minDelta: '0.1', historySize: '1' };
+
+function settingValue(def, values) {
+  const value = values ? values[def.key] : undefined;
+  return value === undefined || value === null ? def.default : value;
+}
+
+function renderSettingField(def, value, locale) {
+  const key = escapeHtml(def.key);
+  const id = `mi-setting-${key}`;
+  const helpText = t(locale, `setting.${def.key}.help`);
+  const text = `<span class="mi-setting-text"><span class="mi-setting-label">${escapeHtml(t(locale, `setting.${def.key}.label`))}</span>`
+    + `${helpText ? `<span class="mi-setting-help">${escapeHtml(helpText)}</span>` : ''}</span>`;
+  if (def.type === 'boolean') {
+    return `<label class="mi-setting mi-setting-check" for="${id}">`
+      + `<input type="checkbox" id="${id}" name="${key}" data-mi-setting="${key}"${value === true ? ' checked' : ''}>`
+      + `${text}</label>`;
+  }
+  const min = def.min === undefined ? '' : ` min="${Number(def.min)}"`;
+  const max = def.max === undefined ? '' : ` max="${Number(def.max)}"`;
+  return `<label class="mi-setting mi-setting-number" for="${id}">${text}`
+    + `<input type="number" id="${id}" name="${key}" data-mi-setting="${key}"${min}${max}`
+    + ` step="${SETTING_STEPS[def.key] || 'any'}" value="${escapeHtml(value)}"></label>`;
+}
+
+function renderSettingsForm(schema, values, locale) {
+  const lang = resolveLocale(locale);
+  const byKey = new Map((schema || []).map((def) => [def.key, def]));
+  const blocks = SETTINGS_BLOCKS.map((block) => {
+    const fields = block.keys
+      .filter((key) => byKey.has(key))
+      .map((key) => renderSettingField(byKey.get(key), settingValue(byKey.get(key), values), lang))
+      .join('');
+    return `<fieldset class="mi-settings-block"><legend>${escapeHtml(t(lang, block.title))}</legend>${fields}</fieldset>`;
+  }).join('');
+  return `<form class="mi-settings" lang="${lang}" data-mi-saved="${escapeHtml(t(lang, 'settings.saved'))}"`
+    + ` data-mi-error="${escapeHtml(t(lang, 'settings.error'))}" onsubmit="return false">`
+    + `<h2 class="mi-settings-title">${escapeHtml(t(lang, 'settings'))}</h2>`
+    + blocks
+    + `<p class="mi-settings-note">${escapeHtml(t(lang, 'settings.nextShow'))}</p>`
+    + '<p class="mi-settings-status" aria-live="polite"></p></form>';
+}
+
 function renderHistoryList(items, locale) {
   if (!items.length) return `<div class="noResults">${escapeHtml(t(locale, 'historyEmpty'))}</div>`;
   return '<ul class="mi-history-list">'
@@ -188,7 +236,7 @@ function renderHistoryPageShell() {
 // Les couleurs du design sont des tokens limités au plugin (pas de :root) pour ne pas
 // toucher au thème du jeu.
 const RECAP_CSS = [
-  '.mi-panel, .mi-recap {',
+  '.mi-panel, .mi-recap, .mi-settings, .mi-settings-button {',
   '  --mi-bg: #0f262c; --mi-card: #143239; --mi-border: #1f3d44;',
   '  --mi-avatar-bg: #1e4a54; --mi-avatar-ring: #2b5f6b;',
   '  --mi-text: #ffffff; --mi-text-2: #cfe2e6; --mi-muted: #8fa9ae; --mi-faint: #5f7c82;',
@@ -247,6 +295,29 @@ const RECAP_CSS = [
     + ' max-height: 70vh; overflow-y: auto; z-index: 9000; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }',
   '.rightDetail > .mi-recap { box-sizing: border-box; max-width: 760px; padding: 20px; background: var(--mi-bg);'
     + ' border-radius: var(--mi-radius); }',
+  '.mi-settings { box-sizing: border-box; max-width: 760px; padding: 20px; background: var(--mi-bg);'
+    + ' border-radius: var(--mi-radius); display: flex; flex-direction: column; gap: 12px; }',
+  '.mi-settings-title { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;'
+    + ' color: var(--mi-text-2); }',
+  '.mi-settings-block { margin: 0; padding: 8px 20px; background: var(--mi-card); border: 1px solid var(--mi-border);'
+    + ' border-radius: var(--mi-radius); }',
+  '.mi-settings-block legend { padding: 0 4px; font-size: 12px; font-weight: 700; color: var(--mi-muted); }',
+  '.mi-setting { display: flex; align-items: center; gap: 12px; min-height: 44px; border-top: 1px solid var(--mi-border);'
+    + ' cursor: pointer; }',
+  '.mi-settings-block legend + .mi-setting { border-top: none; }',
+  '.mi-setting-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }',
+  '.mi-setting-label { font-size: 14px; color: var(--mi-text); }',
+  '.mi-setting-help { font-size: 12px; color: var(--mi-muted); }',
+  '.mi-setting input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--mi-good); }',
+  '.mi-setting input[type="number"] { width: 80px; padding: 4px 8px; background: var(--mi-bg); color: var(--mi-text);'
+    + ' border: 1px solid var(--mi-border); border-radius: 6px; font: inherit; }',
+  '.mi-settings-note { margin: 0; font-size: 12px; color: var(--mi-muted); }',
+  '.mi-settings-status { margin: 0; min-height: 1.4em; font-size: 12px; font-weight: 600; color: var(--mi-good); }',
+  '.mi-settings-status.is-error { color: var(--mi-bad); }',
+  '.mi-settings-button { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 8px; padding: 8px 12px;'
+    + ' background: var(--mi-card); color: var(--mi-text-2); border: 1px solid var(--mi-border); border-radius: 8px;'
+    + ' font: inherit; cursor: pointer; }',
+  '.mi-settings-button.active { border-color: var(--mi-good); color: var(--mi-text); }',
   '.mi-history-list li { display: flex; gap: 8px; }',
   '.mi-history-date { color: var(--color-2); }',
   // Écran ou colonne étroite : identité au-dessus des stats.
@@ -263,6 +334,7 @@ module.exports = {
   renderFloating,
   renderHistoryList,
   renderHistoryPageShell,
+  renderSettingsForm,
   resolveAvatarsJs,
   RECAP_CSS,
 };
