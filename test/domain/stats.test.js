@@ -5,11 +5,10 @@ const { STATS, GROUPS } = require('../../src/domain/stats');
 
 const keysOf = (group) => STATS.filter((s) => s.group === group).map((s) => s.key);
 
-test('chaque stat a une forme complète', () => {
+test('chaque stat a une forme complète, sans libellé', () => {
   for (const s of STATS) {
     assert.equal(typeof s.key, 'string');
-    assert.equal(typeof s.label, 'string');
-    assert.ok(s.label.length > 0);
+    assert.equal('label' in s, false, `libellé inattendu pour ${s.key}`);
     assert.ok(GROUPS.includes(s.group), `groupe inconnu pour ${s.key}`);
     assert.ok(['workers', 'contracts'].includes(s.table), `table inconnue pour ${s.key}`);
     assert.equal(typeof s.inverted, 'boolean');
