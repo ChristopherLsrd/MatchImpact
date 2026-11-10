@@ -48,7 +48,7 @@ function statChanges(beforeRow, afterRow, stats, minDelta) {
     const delta = after - before;
     if (!isReported(delta, minDelta)) continue;
     changes.push({
-      key: s.key, label: s.label, before: round1(before), after: round1(after), delta: round1(delta), inverted: s.inverted,
+      key: s.key, before: round1(before), after: round1(after), delta: round1(delta), inverted: s.inverted,
     });
   }
   return changes;
