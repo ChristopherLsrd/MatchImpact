@@ -24,7 +24,7 @@ function recapFor(beforeStats, afterStats, options = OPTS, extraBefore = {}, ext
   );
 }
 
-test('rapporte une stat modifiée avec avant, après, écart et libellé', () => {
+test('rapporte une stat modifiée avec avant, après et écart', () => {
   const r = recapFor({ entertainment: 62 }, { entertainment: 63.5 });
   assert.deepEqual(r.workers[0].changes, [
     { key: 'entertainment', before: 62, after: 63.5, delta: 1.5, inverted: false },
