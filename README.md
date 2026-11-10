@@ -25,13 +25,13 @@ Les réglages se modifient dans la page **Match Impact** du menu latéral, bouto
 |---|---|---|
 | Panneau de fin de show | activé | Affiche le récap dans l'écran de fin de show |
 | Seulement ma promotion | activé | Ignore les shows des autres promotions |
-| Suivre la popularité | activé | Popularité dans les six régions |
-| Suivre momentum et moral | activé | Momentum et moral du contrat |
-| Suivre la forme | activé | Fatigue et endurance |
-| Suivre le talent | activé | Stats de talent, simples ou détaillées selon le monde |
-| Suivre les relations | activé | Relations entre lutteurs d'un même segment |
-| Écart minimum | 0.5 | Les écarts plus petits sont ignorés (0 à 10) |
-| Taille de l'historique | 20 | Nombre de shows conservés (1 à 100) |
+| Popularité | activé | Popularité dans les six régions |
+| Momentum et moral | activé | Momentum et moral du contrat |
+| Fatigue et endurance | activé | Fatigue et endurance |
+| Talent | activé | Stats de talent, simples ou détaillées selon le monde |
+| Relations | activé | Relations entre lutteurs d'un même segment |
+| Écart minimum | 0.5 | Les écarts plus petits sont masqués (0 à 10) |
+| Shows conservés | 20 | Nombre de shows dans l'historique (1 à 100). Une valeur plus petite raccourcit l'historique au prochain show archivé. |
 
 ## Documentation
 

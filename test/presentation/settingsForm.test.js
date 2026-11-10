@@ -68,3 +68,9 @@ test('le CSS stylise le formulaire avec les tokens du plugin', () => {
   assert.match(RECAP_CSS, /\.mi-settings-status\.is-error \{ color: var\(--mi-bad\); \}/);
   assert.match(RECAP_CSS, /\.mi-settings-button\.active \{/);
 });
+
+test('chaque réglage du schéma a sa place dans le formulaire', () => {
+  const out = renderSettingsForm(SETTINGS_SCHEMA, DEFAULTS, 'en');
+  const fields = out.match(/data-mi-setting="[^"]+"/g) || [];
+  assert.equal(fields.length, SETTINGS_SCHEMA.length);
+});
