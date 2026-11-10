@@ -1,5 +1,7 @@
 'use strict';
-const { renderHistoryList, renderRecapBody, renderHistoryPageShell } = require('../presentation/recapHtml');
+const {
+  renderHistoryList, renderRecapBody, renderHistoryPageShell, resolveAvatarsJs,
+} = require('../presentation/recapHtml');
 
 const PAGE_ID = 'matchImpactPage';
 
@@ -22,6 +24,7 @@ const PAGE_SCRIPT = `(function () { try {
           item.classList.add('active');
           plugins.invoke('match-impact', 'recap-html', Number(item.getAttribute('data-mi-index'))).then(function (recapHtml) {
             detail.innerHTML = recapHtml;
+            ${resolveAvatarsJs('detail')}
           }).catch(function (e) { console.error('[match-impact] récap', e); });
         };
       }).catch(function (e) { console.error('[match-impact] historique', e); });

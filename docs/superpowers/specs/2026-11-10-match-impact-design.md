@@ -87,7 +87,7 @@ Les données échangées par les ports sont des objets simples du domaine (`Work
 
 - **Domaine** : ce qu'est une stat suivie, comment on compare deux photos (seuil, sens inversé, blessure, relations d'un même segment, ordre du card), comment on borne l'historique. Fonctions pures et déterministes.
 - **Application** : `ShowTracker` détient l'état du show en cours (photo de départ, récap déjà produit ou non) et orchestre : filtrer la promotion → photographier → à l'écran récap, relire, calculer, afficher, archiver → au `show:ended`, filet de sécurité puis remise à zéro. Toute erreur d'un port est attrapée et journalisée via `Logger`.
-- **Présentation** : transforme un `Recap` en HTML (échappement, classes `mi-`, variables du thème). Aucune connaissance du jeu.
+- **Présentation** : transforme un `Recap` en HTML (échappement, classes `mi-`, variables `--mi-*` du design). Elle fournit aussi le script qui résout les photos dans la fenêtre du jeu.
 - **Adapters** : traduisent entre le monde du jeu et les ports, avec le moins de code possible et aucune règle métier.
 - **Racine de composition** (`index.js`) : `activate(api)` instancie les adapters, les injecte dans les cas d'usage, branche `api.events` et `api.ipc` sur les méthodes de `ShowTracker` et `HistoryQueries`. `deactivate()` démonte tout.
 
@@ -168,18 +168,26 @@ Règles :
 - Les valeurs sont arrondies à une décimale pour l'affichage. `delta` est calculé avant l'arrondi.
 - Les lutteurs sont triés selon l'ordre du card de leur première apparition.
 - Un lutteur présent dans les participants mais absent de la photo de départ (contrat signé pendant le show) est ignoré.
-- Un lutteur sans aucun changement ni blessure figure quand même dans le récap, avec la mention « Aucun changement ».
+- Un lutteur sans aucun changement ni blessure figure quand même dans le récap (et dans l'historique), mais l'affichage ne lui donne pas de card.
 - Les relations ne sont comparées qu'entre lutteurs d'un même segment, chaque paire une seule fois. Une paire absente avant et présente après a pour ancienne valeur 0 (relation neutre).
 
 ## Affichage (`src/presentation/recapHtml.js`, `src/adapters/GameRecapView.js`, `src/adapters/historyPage.js`)
 
 ### Panneau de fin de show
 
-- C'est un `div.panel` avec un titre « Match Impact » et un bouton pour replier ou déplier, puis un `div.panelContents` à hauteur maximale avec défilement.
-- Une carte par lutteur : son nom, ses segments en sous-titre, puis une ligne par stat modifiée : `Entertainment   62.0 → 63.5   ▲ +1.5`.
-- Une section « Relations » liste les paires modifiées : `A ↔ B   40 → 45   ▲ +5`. Dans le code actuel du jeu, les relations ne sont pas écrites pendant un show (seuls les événements aléatoires et les éditeurs les modifient) : cette section sera donc le plus souvent vide. Elle est conservée à la demande de l'utilisateur.
-- La couleur suit l'effet sur le lutteur : `var(--positive-effect)` pour une bonne nouvelle, `var(--negative-effect)` pour une mauvaise. Pour `fatigue`, une hausse est une mauvaise nouvelle. Une blessure s'affiche en badge `var(--alert)`.
-- Le CSS injecté (`api.ui.injectCSS`) ne contient que de la mise en page et des variables du thème, sans couleur codée en dur. Toutes les classes sont préfixées `mi-`.
+Le rendu suit la maquette `match-impact-cards.html` (`MATCH_IMPACT_DESIGN.md`).
+
+- C'est une `section.mi-panel` (largeur max 760 px) avec un en-tête : « Match Impact », le nombre de catcheurs affichés (« 1 catcheur », « N catcheurs ») et un bouton pour replier ou déplier.
+- Une card par lutteur qui a au moins un changement ou une blessure, sur deux colonnes fixes partagées par toutes les cards (`250px minmax(0, 1fr)`) :
+  - à gauche, l'identité : avatar rond de 52 px (initiales, remplacées par la photo du lutteur quand le jeu en a une), nom, segments en sous-titre sur deux lignes au plus, avec le texte complet en infobulle ;
+  - à droite, une ligne par stat modifiée, aux colonnes fixes `minmax(0, 1fr) 80px 52px 22px 52px` : nom de la stat, pastille d'écart, avant, flèche, après.
+- La pastille porte un triangle (pointe en bas si la valeur baisse) et l'écart signé (`+1.5`, `−5`). Elle est verte pour une bonne nouvelle, rouge pour une mauvaise, grise sans flèche pour un écart nul. Pour `fatigue`, une hausse est une mauvaise nouvelle.
+- Les nombres ont 0 décimale si avant et après sont entiers, sinon 1 décimale pour avant, après et écart.
+- Une blessure ajoute une ligne « Blessure » en rouge : `type (retour date)`.
+- Une card « Relations » liste les paires modifiées (`A ↔ B`), une hausse étant une bonne nouvelle. Dans le code actuel du jeu, les relations ne sont pas écrites pendant un show (seuls les événements aléatoires et les éditeurs les modifient) : cette card sera donc le plus souvent absente. Elle est conservée à la demande de l'utilisateur.
+- Les couleurs du design sont des variables `--mi-*` définies sur `.mi-panel` et `.mi-recap`, jamais sur `:root`, pour ne pas toucher au thème du jeu. Toutes les classes sont préfixées `mi-`.
+- Sous 560 px (largeur de la fenêtre ou du conteneur, par container query), la card passe sur une colonne : identité au-dessus des stats.
+- Les photos sont résolues dans la fenêtre du jeu après l'insertion, par `Game.getContractImage(contractPicture, picture)` : si le résultat est l'image par défaut (`Game._getFallbackImage('people')`), les initiales restent.
 - Tout le texte issu de la base (noms, types de blessure) est échappé.
 
 ### Page Historique
@@ -237,7 +245,7 @@ Le cycle est **rouge → vert → refactor** : écrire un test qui échoue, vér
 | `domain/history.js` | obligatoire | ajout en tête, troncature, liste d'entrée non modifiée |
 | `application/ShowTracker.js` | obligatoire | faux ports en mémoire : filtre de promotion, photo, récap à l'écran de fin, pas de doublon avec `show:ended`, filet de sécurité, remise à zéro, absence de photo, erreur d'un port attrapée et journalisée, réglage `showEndOfShowPanel` |
 | `application/HistoryQueries.js` | obligatoire | faux `HistoryStore` : liste, index hors limites |
-| `presentation/recapHtml.js` | obligatoire | échappement HTML, sens de couleur inversé pour la fatigue, badge blessure, mention « Aucun changement », section relations, aucune couleur codée en dur |
+| `presentation/recapHtml.js` | obligatoire | échappement HTML, sens de couleur inversé pour la fatigue, ligne blessure, lutteurs sans changement masqués, card relations, formatage des décimales, grilles et tokens du design, script des photos |
 | `adapters/StorageHistoryStore.js` | obligatoire | faux `api.storage` : fichier absent, JSON invalide, valeur qui n'est pas un tableau |
 | `adapters/SqlRosterReader.js` | obligatoire pour la construction des requêtes et le mapping | fausse fonction `query` qui enregistre SQL et paramètres : autant de `?` que d'ids, aucune valeur concaténée, une seule requête par lecture groupée, lignes converties en objets du domaine, liste d'ids vide sans requête. Le SQL est en plus exécuté sur une vraie sauvegarde via l'outil MCP `query` |
 | `adapters/GameSettings.js`, `adapters/GameState.js` | tests simples après coup | faux `api` |

@@ -1,5 +1,5 @@
 'use strict';
-const { renderPanel, renderFloating, RECAP_CSS } = require('../presentation/recapHtml');
+const { renderPanel, renderFloating, resolveAvatarsJs, RECAP_CSS } = require('../presentation/recapHtml');
 
 function summaryScript(html) {
   return '(function () { try {'
@@ -7,6 +7,7 @@ function summaryScript(html) {
     + ' if (!side) return false;'
     + " var old = side.querySelector('.mi-panel'); if (old) old.remove();"
     + ` side.insertAdjacentHTML('beforeend', ${JSON.stringify(html)});`
+    + ` ${resolveAvatarsJs("side.querySelector('.mi-panel')")}`
     + ' return true;'
     + " } catch (e) { console.error('[match-impact] panneau', e); return false; } })();";
 }
@@ -15,6 +16,7 @@ function floatingScript(html) {
   return '(function () { try {'
     + " var old = document.getElementById('mi-floating'); if (old) old.remove();"
     + ` document.body.insertAdjacentHTML('beforeend', ${JSON.stringify(html)});`
+    + ` ${resolveAvatarsJs("document.getElementById('mi-floating')")}`
     + ' return true;'
     + " } catch (e) { console.error('[match-impact] panneau flottant', e); return false; } })();";
 }
