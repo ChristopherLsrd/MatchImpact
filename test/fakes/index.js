@@ -46,9 +46,12 @@ function createFakeHistoryStore(initial = []) {
 function createFakeView() {
   return {
     summary: [],
+    summaryLocales: [],
     floating: [],
-    showInSummary(recap) { this.summary.push(recap); },
+    locale: null,
+    showInSummary(recap, locale) { this.summary.push(recap); this.summaryLocales.push(locale); },
     showFloating(recap) { this.floating.push(recap); },
+    setLocale(locale) { this.locale = locale; },
   };
 }
 

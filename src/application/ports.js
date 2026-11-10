@@ -11,8 +11,8 @@
  *   readRelations(ids) → Relation[] ; readCard(showID) → Segment[] ;
  *   findLatestCompletedShow(promotionID, date) → number|null
  * - HistoryStore : load() → Recap[] (vide si absent/corrompu) ; save(list)
- * - RecapView : showInSummary(recap) ; showFloating(recap)
- * - Settings : get(key) → valeur (clés et défauts : SETTINGS_SCHEMA)
+ * - RecapView : showInSummary(recap, locale) ; showFloating(recap) ; setLocale(locale)
+ * - Settings : get(key) → valeur (clés et défauts : SETTINGS_SCHEMA) ; set(key, value)
  * - GameState : playerPromotionId() → number|null
  * - Logger : log(...args) ; error(...args)
  */
@@ -22,22 +22,22 @@ function setting(key, label, type, def, description, bounds = {}) {
 }
 
 const SETTINGS_SCHEMA = Object.freeze([
-  setting('showEndOfShowPanel', 'Panneau de fin de show', 'boolean', true, "Affiche le récap Match Impact dans l'écran de fin de show"),
-  setting('onlyMyPromotion', 'Seulement ma promotion', 'boolean', true, 'Ignore les shows des autres promotions'),
-  setting('trackPopularity', 'Suivre la popularité', 'boolean', true, 'Popularité dans les six régions'),
-  setting('trackMomentumMorale', 'Suivre momentum et moral', 'boolean', true, 'Momentum et moral du contrat'),
-  setting('trackCondition', 'Suivre la forme', 'boolean', true, 'Fatigue et endurance'),
-  setting('trackSkills', 'Suivre le talent', 'boolean', true, 'Stats de talent, simples et détaillées'),
-  setting('trackRelationships', 'Suivre les relations', 'boolean', true, "Relations entre lutteurs d'un même segment"),
-  setting('minDelta', 'Écart minimum', 'number', 0.5, 'Les écarts plus petits sont ignorés', { min: 0, max: 10 }),
-  setting('historySize', "Taille de l'historique", 'number', 20, 'Nombre de shows conservés', { min: 1, max: 100 }),
+  setting('showEndOfShowPanel', 'End-of-show panel', 'boolean', true, 'Show the recap on the results screen'),
+  setting('onlyMyPromotion', 'Only my promotion', 'boolean', true, "Ignore other promotions' shows"),
+  setting('trackPopularity', 'Popularity', 'boolean', true, 'Popularity in the six regions'),
+  setting('trackMomentumMorale', 'Momentum and morale', 'boolean', true, 'Contract momentum and morale'),
+  setting('trackCondition', 'Fatigue and stamina', 'boolean', true, 'Fatigue and stamina'),
+  setting('trackSkills', 'Skills', 'boolean', true, 'Simple or detailed, depending on the world'),
+  setting('trackRelationships', 'Relationships', 'boolean', true, 'Between wrestlers of the same segment'),
+  setting('minDelta', 'Minimum change', 'number', 0.5, 'Smaller changes are hidden', { min: 0, max: 10 }),
+  setting('historySize', 'Shows kept', 'number', 20, 'Number of shows in the history', { min: 1, max: 100 }),
 ]);
 
 const PORTS = Object.freeze({
   RosterReader: ['readRoster', 'readWorkers', 'readRelations', 'readCard', 'findLatestCompletedShow'],
   HistoryStore: ['load', 'save'],
-  RecapView: ['showInSummary', 'showFloating'],
-  Settings: ['get'],
+  RecapView: ['showInSummary', 'showFloating', 'setLocale'],
+  Settings: ['get', 'set'],
   GameState: ['playerPromotionId'],
   Logger: ['log', 'error'],
 });

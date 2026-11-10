@@ -9,6 +9,9 @@ function createGameSettings(settingsApi) {
       const value = settingsApi.get(key);
       return value === undefined || value === null ? defaults[key] : value;
     },
+    set(key, value) {
+      settingsApi.set(key, value);
+    },
   };
 }
 
