@@ -25,22 +25,75 @@ Ces faits ont été vérifiés dans le guide des plugins et dans `resources/app.
 
 Conséquence : le récap porte sur l'ensemble du show (état avant / état après), pas sur chaque segment. Il n'y a pas de notification par segment (décision du brainstorming).
 
-## Architecture
+## Architecture (clean architecture)
 
-La racine du dépôt est le dossier du plugin.
+La racine du dépôt est le dossier du plugin. Le code suit la clean architecture : des couches concentriques où **les dépendances pointent toujours vers l'intérieur**. Le métier ne connaît ni le jeu, ni SQL, ni le DOM, ni l'objet `api`.
 
 ```
 plugin.json
-index.js            point d'entrée : activate/deactivate, événements, IPC, réglages, UI
-lib/stats.js        définition des stats suivies (colonne, libellé, groupe, sens)
-lib/snapshot.js     requêtes SQL : photo des lutteurs, participants d'un show
-lib/diff.js         comparaison de deux photos → récap (pur)
-lib/render.js       récap → HTML (pur)
-lib/history.js      lecture/écriture de l'historique borné (pur, storage injecté)
-test/*.test.js      tests node --test de stats, diff, render, history
+package.json                       scripts : "test": "node --test" (aucune dépendance npm)
+index.js                           racine de composition : seul fichier qui touche `api`
+src/
+  domain/                          entités et règles métier — pur, sans dépendance
+    stats.js                       catalogue des stats suivies
+    recap.js                       computeRecap(before, after, card, options) → Recap
+    history.js                     addToHistory(list, recap, max) → nouvelle liste
+  application/                     cas d'usage — ne dépendent que du domaine et des ports
+    ports.js                       contrats des ports (JSDoc) + fonctions d'assertion
+    ShowTracker.js                 onShowStarted / onSummaryShown / onShowEnded
+    HistoryQueries.js              listHistory() / getRecap(index)
+  presentation/                    mise en forme — pur, dépend du domaine uniquement
+    recapHtml.js                   Recap → HTML (panneau, page historique)
+  adapters/                        implémentation des ports avec l'API du jeu
+    SqlRosterReader.js             port RosterReader  ← api.database.query
+    StorageHistoryStore.js         port HistoryStore  ← api.storage
+    GameRecapView.js               port RecapView     ← api.ui (widgets, executeJS, injectCSS)
+    GameSettings.js                port Settings      ← api.settings (+ déclaration du schéma)
+    GameState.js                   port GameState     ← api.game.getState()
+    summaryWatcher.js              script renderer (MutationObserver) + écoute IPC
+    historyPage.js                 page + entrée de menu + script renderer
+test/
+  domain/ application/ presentation/ adapters/   un fichier *.test.js par module
+  fakes/                                         implémentations en mémoire des ports
+  architecture.test.js                           vérifie la règle de dépendance
 ```
 
-`diff`, `render` et `history` ne dépendent pas de l'objet `api` : `history` reçoit un objet `{ readJSON, writeJSON }`. `snapshot` reçoit une fonction `query(sql, params)`.
+### Règle de dépendance
+
+| Couche | Peut importer | Ne doit jamais importer |
+|---|---|---|
+| `domain` | rien en dehors de `domain` | `application`, `presentation`, `adapters`, `api`, `fs`, DOM |
+| `application` | `domain` | `presentation`, `adapters`, `api` |
+| `presentation` | `domain` | `application`, `adapters`, `api` |
+| `adapters` | `domain`, `application/ports`, `presentation` | les autres adapters |
+| `index.js` | tout | — |
+
+Un test d'architecture (`test/architecture.test.js`) lit les `require(...)` de chaque fichier de `src/` et échoue si cette règle est violée.
+
+### Ports (définis par l'application, implémentés par les adapters)
+
+| Port | Méthodes | Adapter |
+|---|---|---|
+| `RosterReader` | `readRoster(promotionID)` → `{ workers, relations }` ; `readWorkers(ids)` → `workers` ; `readRelations(ids)` → `relations` ; `readCard(showID)` → `card` ; `findLatestCompletedShow(promotionID)` → `showID` ou `null` | `SqlRosterReader` |
+| `HistoryStore` | `load()` → `Recap[]` (tableau vide si absent ou corrompu) ; `save(list)` | `StorageHistoryStore` |
+| `RecapView` | `showInSummary(recap)` ; `showFloating(recap)` | `GameRecapView` |
+| `Settings` | `get(key)` | `GameSettings` |
+| `GameState` | `playerPromotionId()` | `GameState` |
+| `Logger` | `log(...)` ; `error(...)` | `api.console` |
+
+Les données échangées par les ports sont des objets simples du domaine (`WorkerRow`, `Relation`, `Card`, `Recap`), jamais des lignes SQL brutes ni des objets du jeu. `SqlRosterReader` est le seul module qui connaît les noms de tables et les jointures ; il obtient la liste des colonnes suivies auprès de `domain/stats.js`.
+
+### Rôle de chaque couche
+
+- **Domaine** : ce qu'est une stat suivie, comment on compare deux photos (seuil, sens inversé, blessure, relations d'un même segment, ordre du card), comment on borne l'historique. Fonctions pures et déterministes.
+- **Application** : `ShowTracker` détient l'état du show en cours (photo de départ, récap déjà produit ou non) et orchestre : filtrer la promotion → photographier → à l'écran récap, relire, calculer, afficher, archiver → au `show:ended`, filet de sécurité puis remise à zéro. Toute erreur d'un port est attrapée et journalisée via `Logger`.
+- **Présentation** : transforme un `Recap` en HTML (échappement, classes `mi-`, variables du thème). Aucune connaissance du jeu.
+- **Adapters** : traduisent entre le monde du jeu et les ports, avec le moins de code possible et aucune règle métier.
+- **Racine de composition** (`index.js`) : `activate(api)` instancie les adapters, les injecte dans les cas d'usage, branche `api.events` et `api.ipc` sur les méthodes de `ShowTracker` et `HistoryQueries`. `deactivate()` démonte tout.
+
+### Chargement des modules
+
+Le plugin tourne dans le processus principal (Node, CommonJS) : `index.js` charge `src/` par `require('./src/...')`. Au rechargement à chaud, le jeu vide le cache du module principal ; pour que les sous-modules soient eux aussi rechargés, `index.js` supprime au début d'`activate` les entrées de `require.cache` situées sous son dossier. À vérifier lors du test réel.
 
 `plugin.json` reste celui du cahier des charges : permissions `events` et `database`, sans `database:write`.
 
@@ -49,37 +102,37 @@ test/*.test.js      tests node --test de stats, diff, render, history
 ### 1. `show:started` → photo de départ
 
 - Si `onlyMyPromotion` est actif et que `event.data.promotionID !== getState().promotionId`, le show est ignoré.
-- Sinon, `snapshot.takeRoster(query, promotionID)` lit en une requête tous les lutteurs sous contrat actif avec la promotion (`contracts.promotionID = ? AND contracts.expired = 0`), avec les colonnes suivies de `workers` et `momentum`, `morale` du contrat.
-- Puis une requête lit les relations entre ces lutteurs : `SELECT worker1, worker2, relationship FROM relationships WHERE worker1 IN (…) AND worker2 IN (…)`, paramètres `?` générés selon la taille de la liste.
-- La photo est gardée en mémoire : `{ promotionID, showName, date, workers: Map<workerID, row>, relations: Map<"min-max", value> }`. Elle remplace toute photo précédente.
+- Sinon, `ShowTracker.onShowStarted` appelle `RosterReader.readRoster(promotionID)`, qui lit en une requête tous les lutteurs sous contrat actif avec la promotion (`contracts.promotionID = ? AND contracts.expired = 0`), avec les colonnes suivies de `workers` et `momentum`, `morale` du contrat.
+- Puis une seconde requête lit les relations entre ces lutteurs : `SELECT worker1, worker2, relationship FROM relationships WHERE worker1 IN (…) AND worker2 IN (…)`, paramètres `?` générés selon la taille de la liste.
+- La photo est gardée en mémoire par `ShowTracker` : `{ promotionID, showName, date, workers: Map<workerID, row>, relations: Map<"min-max", value> }`. Elle remplace toute photo précédente.
 
 ### 2. Détection de l'écran récapitulatif
 
-- Dans `activate`, un script est injecté par `api.ui.executeJS`, enveloppé dans `try/catch`. Il crée un `MutationObserver` sur `#bookingResults .bookingResultsFinalSummary` (attribut `style`), stocké dans `window.__matchImpactObserver`.
+- Dans `activate`, l'adapter `summaryWatcher` injecte un script par `api.ui.executeJS`, enveloppé dans `try/catch`. Il crée un `MutationObserver` sur `#bookingResults .bookingResultsFinalSummary` (attribut `style`), stocké dans `window.__matchImpactObserver`.
 - Si l'élément n'existe pas encore (page non chargée), le script observe `document.body` (`childList`, `subtree`) jusqu'à son apparition, puis se rattache à l'élément.
 - Quand l'écran passe de masqué à visible, il appelle `plugins.send('match-impact', 'summary-shown', { showID })`. `showID` vaut `Booking.currentShow` si cette variable existe, sinon `null`.
 - Les callbacks d'un `MutationObserver` s'exécutent après la fin de la fonction synchrone `showSummaryPage()`, donc après l'écriture en base. À vérifier lors du test réel.
 
 ### 3. `summary-shown` → récap
 
-Le handler `api.ipc.on('summary-shown', …)` :
+`summaryWatcher` reçoit `summary-shown` par `api.ipc.on` et appelle `ShowTracker.onSummaryShown(showID)`, qui :
 
 1. Il ne fait rien s'il n'y a pas de photo de départ, ou si le récap de ce show a déjà été produit.
-2. Il détermine les participants :
+2. Il détermine les participants avec `RosterReader.readCard(showID)` (ou `findLatestCompletedShow` si `showID` est absent) :
    - si `showID` est fourni : `segments` (`showID = ?`, triés par `segmentorder`) jointe à `opponents`, en excluant les lutteurs au bord du ring (`opponentSet >= 0`, comme `endShow`) ;
    - sinon : le dernier show complet de la promotion, `SELECT i.instanceID FROM eventinstance i JOIN events e ON e.eventID = i.eventID WHERE e.promotionID = ? AND i.complete = 1 ORDER BY i.instanceID DESC LIMIT 1` (`complete = 1` est écrit par `showSummaryPage` juste après les stats).
    - Résultat : la liste des segments dans l'ordre du card, avec pour chacun nom, type, note et lutteurs.
-3. Il relit en base les mêmes colonnes pour les participants (une requête `WHERE workerID IN (…)`) et les relations entre participants d'un même segment.
-4. Il appelle `diff.compute(before, after, segments, settings)`.
-5. Si `showEndOfShowPanel` est actif, il injecte `render.panel(recap)` avec `api.ui.widgets.inject({ pageId: 'bookingResults', selector: '.br-summary-side', position: 'beforeend', wrapperClass: 'match-impact-panel' })`. Si `widgets.inject` ne fonctionne pas sur une page déjà affichée, il se replie sur `executeJS` avec un élément marqué `data-plugin-id="match-impact"`.
-6. Il ajoute le récap à l'historique.
+3. Il relit (`readWorkers`, `readRelations`) les mêmes colonnes pour les participants (une requête `WHERE workerID IN (…)`) et les relations entre participants d'un même segment.
+4. Il appelle `computeRecap(before, after, card, options)` du domaine, `options` étant lu dans `Settings`.
+5. Si `showEndOfShowPanel` est actif, il appelle `RecapView.showInSummary(recap)`. L'adapter `GameRecapView` produit le HTML avec `presentation/recapHtml.js` et l'injecte avec `api.ui.widgets.inject({ pageId: 'bookingResults', selector: '.br-summary-side', position: 'beforeend', wrapperClass: 'match-impact-panel' })`. Si `widgets.inject` ne fonctionne pas sur une page déjà affichée, il se replie sur `executeJS` avec un élément marqué `data-plugin-id="match-impact"`.
+6. Il archive : `HistoryStore.save(addToHistory(HistoryStore.load(), recap, historySize))`.
 
 ### 4. `show:ended` → filet de sécurité
 
-- Si le récap de ce show existe déjà, le handler ne fait rien de plus. Sinon (détection ratée), il produit le récap à partir de `event.data.segments` et `event.data.showID`, l'enregistre dans l'historique et l'affiche dans un panneau flottant ouvrable et refermable (style `event-logger`).
+- Si le récap de ce show existe déjà, le handler ne fait rien de plus. Sinon (détection ratée), il produit le récap à partir de `event.data.segments` et `event.data.showID`, l'archive et appelle `RecapView.showFloating(recap)`, qui l'affiche dans un panneau flottant ouvrable et refermable (style `event-logger`).
 - Dans tous les cas, la photo de départ est effacée.
 
-## Stats suivies (`lib/stats.js`)
+## Stats suivies (`src/domain/stats.js`)
 
 | Groupe (réglage) | Colonnes | Défaut |
 |---|---|---|
@@ -90,11 +143,11 @@ Le handler `api.ipc.on('summary-shown', …)` :
 | Relations (`trackRelationships`) | `relationships.relationship` entre lutteurs d'un même segment | activé |
 | Blessures | `injuryType`, `injuryHealDate` : vides avant, renseignés après | toujours |
 
-Chaque entrée de `stats.js` contient : `key`, `label` (libellé court affiché), `group`, `table` (`workers` ou `contracts`), `inverted` (true pour `fatigue`).
+Chaque entrée du catalogue contient : `key`, `label` (libellé court affiché), `group`, `table` (`workers` ou `contracts`), `inverted` (true pour `fatigue`).
 
-## Calcul des écarts (`lib/diff.js`)
+## Calcul des écarts (`src/domain/recap.js`)
 
-`compute(before, after, segments, settings)` renvoie :
+`computeRecap(before, after, card, options)` renvoie un `Recap` :
 
 ```js
 {
@@ -118,7 +171,7 @@ Règles :
 - Un lutteur sans aucun changement ni blessure figure quand même dans le récap, avec la mention « Aucun changement ».
 - Les relations ne sont comparées qu'entre lutteurs d'un même segment, chaque paire une seule fois. Une paire absente avant et présente après a pour ancienne valeur 0 (relation neutre).
 
-## Affichage (`lib/render.js`)
+## Affichage (`src/presentation/recapHtml.js`, `src/adapters/GameRecapView.js`, `src/adapters/historyPage.js`)
 
 ### Panneau de fin de show
 
@@ -133,12 +186,13 @@ Règles :
 
 - Elle est créée par `api.ui.addPage({ id: 'matchImpactPage', title: 'Match Impact', initFunction: 'MatchImpactPage' })` et `api.ui.addSideMenuItem({ pageId: 'matchImpactPage', label: 'Match Impact', section: 'bottom' })`.
 - `window.MatchImpactPage.init()` appelle `plugins.invoke('match-impact', 'get-history')` pour récupérer la liste des récaps.
-- La page utilise la mise en page `leftRightSplit` : à gauche la liste des shows (date, nom), à droite le récap du show choisi, avec le même rendu que le panneau. Pour éviter de dupliquer le rendu, le HTML est produit côté plugin : `plugins.invoke('match-impact', 'render-recap', index)` le renvoie.
+- La page utilise la mise en page `leftRightSplit` : à gauche la liste des shows (date, nom), à droite le récap du show choisi, avec le même rendu que le panneau. Pour éviter de dupliquer le rendu, le HTML est produit côté plugin : `plugins.invoke('match-impact', 'render-recap', index)` appelle `HistoryQueries.getRecap(index)` puis `recapHtml`.
 
-## Historique (`lib/history.js`)
+## Historique (`src/domain/history.js`, `src/adapters/StorageHistoryStore.js`)
 
 - Fichier `data/history.json` : un tableau de récaps, du plus récent au plus ancien.
-- `add(storage, recap, max)` ajoute le récap en tête puis tronque à `max` éléments (`historySize`). `list(storage)` renvoie le tableau, ou `[]` si le fichier est absent ou corrompu.
+- Domaine : `addToHistory(list, recap, max)` renvoie une nouvelle liste avec le récap en tête, tronquée à `max` éléments (`historySize`). Aucune entrée/sortie.
+- Adapter : `StorageHistoryStore.load()` lit le fichier et renvoie `[]` s'il est absent, corrompu ou n'est pas un tableau ; `save(list)` l'écrit avec `api.storage.writeJSON`.
 
 ## Réglages (`api.settings`)
 
@@ -158,7 +212,7 @@ Les réglages sont lus au moment du calcul, pas mis en cache.
 
 ## Erreurs et robustesse
 
-- Chaque handler (`show:started`, `summary-shown`, `show:ended`, IPC) est entièrement entouré d'un `try/catch` qui journalise avec `api.console.error`. Une erreur du plugin ne remonte jamais au jeu.
+- Chaque méthode publique de `ShowTracker` et `HistoryQueries`, et chaque handler branché dans `index.js`, est entièrement entouré d'un `try/catch` qui journalise avec `api.console.error`. Une erreur du plugin ne remonte jamais au jeu.
 - Chaque champ d'événement est vérifié avant usage.
 - Toutes les requêtes utilisent des paramètres `?`, jamais de concaténation de valeurs.
 - Le code injecté par `executeJS` est enveloppé dans `try/catch` côté fenêtre du jeu.
@@ -170,17 +224,45 @@ Les réglages sont lus au moment du calcul, pas mis en cache.
 - Il appelle `api.ui.widgets.removeAll()` et retire les éléments `[data-plugin-id="match-impact"]`.
 - Les événements, handlers IPC et le CSS injecté sont nettoyés automatiquement par le jeu.
 
-## Tests
+## Méthode de développement
 
-- **Tests automatiques** (`node --test`) :
-  - `diff` : seuil `minDelta`, groupes désactivés, `null` traité comme 0, ordre du card, lutteur absent de la photo, blessure, relations entre lutteurs d'un même segment uniquement ;
-  - `render` : échappement HTML, sens de couleur inversé pour la fatigue, mention « Aucun changement » ;
-  - `history` : troncature, fichier absent ou corrompu.
+### TDD : où et comment
+
+Le cycle est **rouge → vert → refactor** : écrire un test qui échoue, vérifier qu'il échoue pour la bonne raison, écrire le code minimal qui le fait passer, puis nettoyer en gardant les tests verts. Dans les modules marqués « obligatoire », aucun code de production n'est écrit sans un test rouge qui le réclame.
+
+| Module | TDD | Ce que couvrent les tests |
+|---|---|---|
+| `domain/stats.js` | obligatoire | groupes et colonnes du catalogue, `inverted` sur `fatigue` uniquement, colonnes conformes au schéma relevé |
+| `domain/recap.js` | obligatoire | photos factices ; au moins un test par règle de la section « Calcul des écarts » |
+| `domain/history.js` | obligatoire | ajout en tête, troncature, liste d'entrée non modifiée |
+| `application/ShowTracker.js` | obligatoire | faux ports en mémoire : filtre de promotion, photo, récap à l'écran de fin, pas de doublon avec `show:ended`, filet de sécurité, remise à zéro, absence de photo, erreur d'un port attrapée et journalisée, réglage `showEndOfShowPanel` |
+| `application/HistoryQueries.js` | obligatoire | faux `HistoryStore` : liste, index hors limites |
+| `presentation/recapHtml.js` | obligatoire | échappement HTML, sens de couleur inversé pour la fatigue, badge blessure, mention « Aucun changement », section relations, aucune couleur codée en dur |
+| `adapters/StorageHistoryStore.js` | obligatoire | faux `api.storage` : fichier absent, JSON invalide, valeur qui n'est pas un tableau |
+| `adapters/SqlRosterReader.js` | obligatoire pour la construction des requêtes et le mapping | fausse fonction `query` qui enregistre SQL et paramètres : autant de `?` que d'ids, aucune valeur concaténée, une seule requête par lecture groupée, lignes converties en objets du domaine, liste d'ids vide sans requête. Le SQL est en plus exécuté sur une vraie sauvegarde via l'outil MCP `query` |
+| `adapters/GameSettings.js`, `adapters/GameState.js` | tests simples après coup | faux `api` |
+| `adapters/GameRecapView.js`, `summaryWatcher.js`, `historyPage.js` | non : code d'interface mince | test réel dans le jeu ; leur HTML vient de `presentation`, déjà testée |
+| `index.js` | non : racine de composition | `validate_plugin` et test réel |
+| règle de dépendance | test d'architecture | `test/architecture.test.js` |
+
+Les faux ports (`test/fakes/`) suivent exactement les contrats de `application/ports.js`. `ports.js` exporte des fonctions d'assertion de forme, utilisées à la fois par les tests des fakes et par ceux des adapters, pour que faux et vrais adapters ne divergent pas.
+
+### Outils et conventions
+
+- Tests avec `node:test` et `node:assert/strict`, lancés par `npm test` (`node --test`). Aucune dépendance npm.
+- CommonJS (`require` / `module.exports`), comme l'attend le chargeur de plugins du jeu.
+- Un module, une responsabilité ; un fichier de test par module, nommé comme lui.
+- Commits petits et fréquents : chaque cycle vert peut donner lieu à un commit.
+
+### Vérifications hors tests automatiques
+
 - **Validation** : `validate_plugin` via MCP.
+- **SQL** : chaque requête de `SqlRosterReader` exécutée via l'outil MCP `query` sur une sauvegarde réelle.
 - **Test réel** sur un show d'au moins trois segments, dont un angle :
   - le panneau apparaît dans l'écran récapitulatif ;
   - les variations de popularité concordent avec l'indicateur natif et avec les valeurs relevées en base via MCP après le show ;
   - désactiver le plugin retire son interface sans redémarrer ;
+  - le rechargement à chaud recharge aussi les modules de `src/` ;
   - l'historique survit à un redémarrage du jeu.
 
 ## Critères de réussite
