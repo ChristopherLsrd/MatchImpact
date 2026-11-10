@@ -6,14 +6,15 @@ Le plugin est en lecture seule : il n'écrit jamais en base et ne modifie pas le
 
 ## Cahier des charges
 
-Voir [docs/SPEC.md](docs/SPEC.md).
+- Cahier des charges initial : [docs/SPEC.md](docs/SPEC.md)
+- Design validé : [docs/superpowers/specs/2026-11-10-match-impact-design.md](docs/superpowers/specs/2026-11-10-match-impact-design.md)
 
 ## Installation en développement (Windows)
 
 La racine du dépôt est le dossier du plugin. Pour que le jeu le charge directement depuis le dépôt :
 
 ```powershell
-New-Item -ItemType Junction -Path "$env:APPDATA\Pro Wrestling Sim\plugins\match-impact" -Target "F:\Dev\MatchImpact"
+New-Item -ItemType Junction -Path "$env:APPDATA\ProWrestlingSimulator\plugins\match-impact" -Target "F:\Dev\MatchImpact"
 ```
 
 ## État
