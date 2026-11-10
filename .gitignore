@@ -1,0 +1,5 @@
+# Données runtime créées par api.storage
+data/
+node_modules/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,9 @@
+{
+  "id": "match-impact",
+  "name": "Match Impact",
+  "version": "1.0.0",
+  "description": "Récap des stats en hausse et en baisse après chaque segment et chaque show.",
+  "author": "",
+  "main": "index.js",
+  "permissions": ["events", "database"]
+}
