@@ -39,7 +39,7 @@ src/
     recap.js                       computeRecap(before, after, card, options) → Recap
     history.js                     addToHistory(list, recap, max) → nouvelle liste
   application/                     cas d'usage — ne dépendent que du domaine et des ports
-    ports.js                       contrats des ports (JSDoc) + fonctions d'assertion
+    ports.js                       contrats des ports (JSDoc), fonctions d'assertion, SETTINGS_SCHEMA
     ShowTracker.js                 onShowStarted / onSummaryShown / onShowEnded
     HistoryQueries.js              listHistory() / getRecap(index)
   presentation/                    mise en forme — pur, dépend du domaine uniquement
@@ -74,10 +74,10 @@ Un test d'architecture (`test/architecture.test.js`) lit les `require(...)` de c
 
 | Port | Méthodes | Adapter |
 |---|---|---|
-| `RosterReader` | `readRoster(promotionID)` → `{ workers, relations }` ; `readWorkers(ids)` → `workers` ; `readRelations(ids)` → `relations` ; `readCard(showID)` → `card` ; `findLatestCompletedShow(promotionID)` → `showID` ou `null` | `SqlRosterReader` |
+| `RosterReader` | `readRoster(promotionID)` → `{ workers, relations }` ; `readWorkers(ids, promotionID)` → `workers` ; `readRelations(ids)` → `relations` ; `readCard(showID)` → `card` ; `findLatestCompletedShow(promotionID, date)` → `showID` ou `null` | `SqlRosterReader` |
 | `HistoryStore` | `load()` → `Recap[]` (tableau vide si absent ou corrompu) ; `save(list)` | `StorageHistoryStore` |
 | `RecapView` | `showInSummary(recap)` ; `showFloating(recap)` | `GameRecapView` |
-| `Settings` | `get(key)` | `GameSettings` |
+| `Settings` | `get(key)` (clés et défauts : `SETTINGS_SCHEMA`, exporté par `ports.js`) | `GameSettings` |
 | `GameState` | `playerPromotionId()` | `GameState` |
 | `Logger` | `log(...)` ; `error(...)` | `api.console` |
 
@@ -108,8 +108,7 @@ Le plugin tourne dans le processus principal (Node, CommonJS) : `index.js` charg
 
 ### 2. Détection de l'écran récapitulatif
 
-- Dans `activate`, l'adapter `summaryWatcher` injecte un script par `api.ui.executeJS`, enveloppé dans `try/catch`. Il crée un `MutationObserver` sur `#bookingResults .bookingResultsFinalSummary` (attribut `style`), stocké dans `window.__matchImpactObserver`.
-- Si l'élément n'existe pas encore (page non chargée), le script observe `document.body` (`childList`, `subtree`) jusqu'à son apparition, puis se rattache à l'élément.
+- Dans `activate`, l'adapter `summaryWatcher` injecte un script par `api.ui.executeJS`, enveloppé dans `try/catch`. Il crée un `MutationObserver` sur `document.body` (`childList`, `subtree`, `attributes` filtré sur `style`), stocké dans `window.__matchImpactObserver`. À chaque mutation, il relit `#bookingResults .bookingResultsFinalSummary` et compare son état visible à l'état précédent. Observer `body` plutôt que l'élément lui-même résiste au cas où le jeu recrée la page de résultats.
 - Quand l'écran passe de masqué à visible, il appelle `plugins.send('match-impact', 'summary-shown', { showID })`. `showID` vaut `Booking.currentShow` si cette variable existe, sinon `null`.
 - Les callbacks d'un `MutationObserver` s'exécutent après la fin de la fonction synchrone `showSummaryPage()`, donc après l'écriture en base. À vérifier lors du test réel.
 
@@ -120,11 +119,11 @@ Le plugin tourne dans le processus principal (Node, CommonJS) : `index.js` charg
 1. Il ne fait rien s'il n'y a pas de photo de départ, ou si le récap de ce show a déjà été produit.
 2. Il détermine les participants avec `RosterReader.readCard(showID)` (ou `findLatestCompletedShow` si `showID` est absent) :
    - si `showID` est fourni : `segments` (`showID = ?`, triés par `segmentorder`) jointe à `opponents`, en excluant les lutteurs au bord du ring (`opponentSet >= 0`, comme `endShow`) ;
-   - sinon : le dernier show complet de la promotion, `SELECT i.instanceID FROM eventinstance i JOIN events e ON e.eventID = i.eventID WHERE e.promotionID = ? AND i.complete = 1 ORDER BY i.instanceID DESC LIMIT 1` (`complete = 1` est écrit par `showSummaryPage` juste après les stats).
+   - sinon : le dernier show complet de la promotion à la date du show ou avant, `SELECT i.instanceID FROM eventinstance i JOIN events e ON e.eventID = i.eventID WHERE e.promotionID = ? AND i.complete = 1 AND i.airDate <= ? ORDER BY i.airDate DESC, i.instanceID DESC LIMIT 1` (`complete = 1` est écrit par `showSummaryPage` juste après les stats ; l'`instanceID` seul ne suffit pas, vérifié sur une sauvegarde réelle).
    - Résultat : la liste des segments dans l'ordre du card, avec pour chacun nom, type, note et lutteurs.
-3. Il relit (`readWorkers`, `readRelations`) les mêmes colonnes pour les participants (une requête `WHERE workerID IN (…)`) et les relations entre participants d'un même segment.
+3. Il relit (`readWorkers(ids, promotionID)`, `readRelations(ids)`) les mêmes colonnes pour les participants (une requête `WHERE workerID IN (…)`) et les relations entre participants d'un même segment.
 4. Il appelle `computeRecap(before, after, card, options)` du domaine, `options` étant lu dans `Settings`.
-5. Si `showEndOfShowPanel` est actif, il appelle `RecapView.showInSummary(recap)`. L'adapter `GameRecapView` produit le HTML avec `presentation/recapHtml.js` et l'injecte avec `api.ui.widgets.inject({ pageId: 'bookingResults', selector: '.br-summary-side', position: 'beforeend', wrapperClass: 'match-impact-panel' })`. Si `widgets.inject` ne fonctionne pas sur une page déjà affichée, il se replie sur `executeJS` avec un élément marqué `data-plugin-id="match-impact"`.
+5. Si `showEndOfShowPanel` est actif, il appelle `RecapView.showInSummary(recap)`. L'adapter `GameRecapView` produit le HTML avec `presentation/recapHtml.js` et l'insère dans `#bookingResults .br-summary-side` par `api.ui.executeJS`, avec un élément marqué `data-plugin-id="match-impact"`. `widgets.inject` n'est pas utilisé : le guide ne dit pas s'il agit sur une page déjà affichée. Si la colonne est introuvable, le script renvoie `false` et l'adapter affiche le panneau flottant à la place.
 6. Il archive : `HistoryStore.save(addToHistory(HistoryStore.load(), recap, historySize))`.
 
 ### 4. `show:ended` → filet de sécurité
