@@ -23,6 +23,7 @@ module.exports = {
     const { createGameRecapView } = require('./src/adapters/GameRecapView');
     const { createGameSettings } = require('./src/adapters/GameSettings');
     const { createGameState } = require('./src/adapters/GameState');
+    const { createSettingsEditor } = require('./src/application/SettingsEditor');
     const { createSummaryWatcher } = require('./src/adapters/summaryWatcher');
     const { createHistoryPage } = require('./src/adapters/historyPage');
 
@@ -38,6 +39,7 @@ module.exports = {
 
     const tracker = createShowTracker({ roster, history, view, settings, gameState, logger });
     const queries = createHistoryQueries({ history, logger });
+    const settingsEditor = createSettingsEditor({ settings, logger });
 
     api.events.on('show:started', (event) => tracker.onShowStarted(event && event.data));
     api.events.on('show:ended', (event) => tracker.onShowEnded(event && event.data));
@@ -45,11 +47,13 @@ module.exports = {
     const watcher = createSummaryWatcher({
       ui: api.ui, ipc: api.ipc, onSummaryShown: (payload) => tracker.onSummaryShown(payload), logger,
     });
-    const page = createHistoryPage({ ui: api.ui, ipc: api.ipc, queries, logger });
+    const page = createHistoryPage({ ui: api.ui, ipc: api.ipc, queries, settingsEditor, logger });
     watcher.start();
     page.start();
+    view.refreshLocale();
 
     reinject = () => {
+      view.refreshLocale();
       watcher.reinject();
       page.reinject();
     };

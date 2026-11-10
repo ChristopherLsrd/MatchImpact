@@ -1,5 +1,7 @@
 'use strict';
 
+const { resolveLocale, t, statLabel } = require('./i18n');
+
 // Rendu du récap selon la maquette match-impact-cards.html (MATCH_IMPACT_DESIGN.md) :
 // une card par catcheur, des lignes de stats à colonnes fixes, une pastille d'écart colorée.
 
@@ -56,37 +58,39 @@ function renderStat(label, before, after, delta, good) {
     + '</div>';
 }
 
-function renderInjury(injury) {
-  const text = `${injury.type}${injury.healDate ? ` (retour ${injury.healDate})` : ''}`;
-  return '<div class="mi-stat mi-injury"><span class="mi-label">Blessure</span>'
+function renderInjury(injury, locale) {
+  const text = injury.healDate
+    ? t(locale, 'injuryReturn', { type: injury.type, date: injury.healDate })
+    : String(injury.type);
+  return `<div class="mi-stat mi-injury"><span class="mi-label">${escapeHtml(t(locale, 'injury'))}</span>`
     + `<span class="mi-injury-text">${escapeHtml(text)}</span></div>`;
 }
 
-function renderCard(worker, segments) {
+function renderCard(worker, segments, locale) {
   const match = worker.segments
     .map((i) => (segments[i] ? segments[i].name : ''))
     .filter(Boolean)
     .join(' · ');
   const stats = worker.changes
-    .map((c) => renderStat(c.label, c.before, c.after, c.delta, c.inverted ? c.delta < 0 : c.delta > 0))
+    .map((c) => renderStat(statLabel(locale, c.key), c.before, c.after, c.delta, c.inverted ? c.delta < 0 : c.delta > 0))
     .join('');
   return '<article class="mi-card">'
     + '<div class="mi-id">'
-    + `<div class="mi-avatar" role="img" aria-label="Photo de ${escapeHtml(worker.name)}"`
+    + `<div class="mi-avatar" role="img" aria-label="${escapeHtml(t(locale, 'photoOf', { name: worker.name }))}"`
     + ` data-mi-picture="${escapeHtml(worker.picture)}" data-mi-contract-picture="${escapeHtml(worker.contractPicture)}">`
     + `${escapeHtml(initials(worker.name))}</div>`
     + '<div class="mi-id-text">'
     + `<h3 class="mi-name">${escapeHtml(worker.name)}</h3>`
     + `<p class="mi-match" title="${escapeHtml(match)}">${escapeHtml(match)}</p>`
     + '</div></div>'
-    + `<div class="mi-stats">${stats}${worker.injury ? renderInjury(worker.injury) : ''}</div>`
+    + `<div class="mi-stats">${stats}${worker.injury ? renderInjury(worker.injury, locale) : ''}</div>`
     + '</article>';
 }
 
-function renderRelations(relations) {
+function renderRelations(relations, locale) {
   if (!relations.length) return '';
   return '<article class="mi-card mi-relations">'
-    + '<div class="mi-id"><div class="mi-id-text"><h3 class="mi-name">Relations</h3></div></div>'
+    + `<div class="mi-id"><div class="mi-id-text"><h3 class="mi-name">${escapeHtml(t(locale, 'relations'))}</h3></div></div>`
     + '<div class="mi-stats">'
     + relations.map((r) => renderStat(`${r.name1} ↔ ${r.name2}`, r.before, r.after, r.delta, r.delta > 0)).join('')
     + '</div></article>';
@@ -96,41 +100,46 @@ function shownWorkers(recap) {
   return recap.workers.filter((w) => w.changes.length || w.injury);
 }
 
-function renderRecapBody(recap) {
+function renderRecapBody(recap, locale) {
+  const lang = resolveLocale(locale);
   const show = `<p class="mi-show">${escapeHtml(recap.showName)}${recap.date ? ` · ${escapeHtml(recap.date)}` : ''}</p>`;
   const workers = shownWorkers(recap);
   const relations = recap.relations || [];
   const content = workers.length || relations.length
-    ? workers.map((w) => renderCard(w, recap.segments)).join('') + renderRelations(relations)
-    : '<div class="noResults">Aucun changement notable pendant ce show.</div>';
-  return `<div class="mi-recap">${show}${content}</div>`;
+    ? workers.map((w) => renderCard(w, recap.segments, lang)).join('') + renderRelations(relations, lang)
+    : `<div class="noResults">${escapeHtml(t(lang, 'noChange'))}</div>`;
+  return `<div class="mi-recap" lang="${lang}">${show}${content}</div>`;
 }
 
-function renderCount(recap) {
+function renderCount(recap, locale) {
   const n = shownWorkers(recap).length;
-  return `<span class="mi-count">${n} ${n > 1 ? 'catcheurs' : 'catcheur'}</span>`;
+  return `<span class="mi-count">${escapeHtml(t(locale, n > 1 ? 'wrestlers.many' : 'wrestlers.one', { n }))}</span>`;
 }
 
-function renderHeader(recap, button) {
+function renderHeader(recap, button, locale) {
   return '<header class="mi-header"><h2>Match Impact</h2>'
-    + `<div class="mi-header-tools">${renderCount(recap)}${button}</div></header>`;
+    + `<div class="mi-header-tools">${renderCount(recap, locale)}${button}</div></header>`;
 }
 
-function renderPanel(recap) {
-  const toggle = '<button type="button" class="mi-toggle clickable" title="Replier" aria-label="Replier"'
+function renderPanel(recap, locale) {
+  const lang = resolveLocale(locale);
+  const label = escapeHtml(t(lang, 'collapse'));
+  const toggle = `<button type="button" class="mi-toggle clickable" title="${label}" aria-label="${label}"`
     + ' onclick="this.closest(\'.mi-panel\').classList.toggle(\'mi-collapsed\')">▾</button>';
-  return `<section class="mi-panel" ${PLUGIN_ATTR} aria-label="Match Impact">`
-    + renderHeader(recap, toggle)
-    + renderRecapBody(recap)
+  return `<section class="mi-panel" ${PLUGIN_ATTR} aria-label="Match Impact" lang="${lang}">`
+    + renderHeader(recap, toggle, lang)
+    + renderRecapBody(recap, lang)
     + '</section>';
 }
 
-function renderFloating(recap) {
-  const close = '<button type="button" class="mi-close clickable" title="Fermer" aria-label="Fermer"'
+function renderFloating(recap, locale) {
+  const lang = resolveLocale(locale);
+  const label = escapeHtml(t(lang, 'close'));
+  const close = `<button type="button" class="mi-close clickable" title="${label}" aria-label="${label}"`
     + ' onclick="this.closest(\'.mi-floating\').remove()">✕</button>';
-  return `<section class="mi-panel mi-floating" id="mi-floating" ${PLUGIN_ATTR} aria-label="Match Impact">`
-    + renderHeader(recap, close)
-    + renderRecapBody(recap)
+  return `<section class="mi-panel mi-floating" id="mi-floating" ${PLUGIN_ATTR} aria-label="Match Impact" lang="${lang}">`
+    + renderHeader(recap, close, lang)
+    + renderRecapBody(recap, lang)
     + '</section>';
 }
 
@@ -157,8 +166,56 @@ function resolveAvatarsJs(rootExpr) {
 })(${rootExpr});`;
 }
 
-function renderHistoryList(items) {
-  if (!items.length) return '<div class="noResults">Aucun show enregistré pour l\'instant.</div>';
+// Ordre des réglages dans le formulaire.
+const SETTINGS_BLOCKS = [
+  { title: 'settings.tracked', keys: ['trackPopularity', 'trackMomentumMorale', 'trackCondition', 'trackSkills', 'trackRelationships'] },
+  { title: 'settings.display', keys: ['showEndOfShowPanel', 'onlyMyPromotion', 'minDelta', 'historySize'] },
+];
+const SETTING_STEPS = { minDelta: '0.1', historySize: '1' };
+
+function settingValue(def, values) {
+  const value = values ? values[def.key] : undefined;
+  return value === undefined || value === null ? def.default : value;
+}
+
+function renderSettingField(def, value, locale) {
+  const key = escapeHtml(def.key);
+  const id = `mi-setting-${key}`;
+  const helpText = t(locale, `setting.${def.key}.help`);
+  const text = `<span class="mi-setting-text"><span class="mi-setting-label">${escapeHtml(t(locale, `setting.${def.key}.label`))}</span>`
+    + `${helpText ? `<span class="mi-setting-help">${escapeHtml(helpText)}</span>` : ''}</span>`;
+  if (def.type === 'boolean') {
+    return `<label class="mi-setting mi-setting-check" for="${id}">`
+      + `<input type="checkbox" id="${id}" name="${key}" data-mi-setting="${key}"${value === true ? ' checked' : ''}>`
+      + `${text}</label>`;
+  }
+  const min = def.min === undefined ? '' : ` min="${Number(def.min)}"`;
+  const max = def.max === undefined ? '' : ` max="${Number(def.max)}"`;
+  return `<label class="mi-setting mi-setting-number" for="${id}">${text}`
+    + `<input type="number" id="${id}" name="${key}" data-mi-setting="${key}"${min}${max}`
+    + ` step="${SETTING_STEPS[def.key] || 'any'}" value="${escapeHtml(value)}"></label>`;
+}
+
+function renderSettingsForm(schema, values, locale) {
+  const lang = resolveLocale(locale);
+  const byKey = new Map((schema || []).map((def) => [def.key, def]));
+  const blocks = SETTINGS_BLOCKS.map((block) => {
+    const fields = block.keys
+      .filter((key) => byKey.has(key))
+      .map((key) => renderSettingField(byKey.get(key), settingValue(byKey.get(key), values), lang))
+      .join('');
+    return `<fieldset class="mi-settings-block"><legend>${escapeHtml(t(lang, block.title))}</legend>${fields}</fieldset>`;
+  }).join('');
+  return `<form class="mi-settings" lang="${lang}" data-mi-saved="${escapeHtml(t(lang, 'settings.saved'))}"`
+    + ` data-mi-error="${escapeHtml(t(lang, 'settings.error'))}" onsubmit="return false">`
+    + `<h2 class="mi-settings-title">${escapeHtml(t(lang, 'settings'))}</h2>`
+    + blocks
+    + `<p class="mi-settings-note">${escapeHtml(t(lang, 'settings.nextShow'))}</p>`
+    + '<p class="mi-settings-status" aria-live="polite"></p></form>';
+}
+
+function renderHistoryList(items, locale) {
+  if (!items.length) return `<div class="noResults">${escapeHtml(t(locale, 'historyEmpty'))}</div>`;
   return '<ul class="mi-history-list">'
     + items.map((i) => `<li class="clickable" data-mi-index="${Number(i.index)}">`
       + `<span class="mi-history-date">${escapeHtml(i.date)}</span> `
@@ -166,17 +223,20 @@ function renderHistoryList(items) {
     + '</ul>';
 }
 
+// Coquille sans texte : le script de page la remplit dans la langue du jeu (handler page-texts).
 function renderHistoryPageShell() {
   return '<div class="leftRightSplit mi-history">'
-    + '<div class="leftListContainer"><div class="leftList" id="mi-history-list"></div></div>'
-    + '<div class="rightDetail" id="mi-history-detail"><div class="noResults">Choisis un show dans la liste.</div></div>'
+    + '<div class="leftListContainer">'
+    + '<button type="button" class="mi-settings-button clickable" id="mi-settings-button">⚙ <span class="mi-settings-label"></span></button>'
+    + '<div class="leftList" id="mi-history-list"></div></div>'
+    + '<div class="rightDetail" id="mi-history-detail"><div class="noResults mi-history-pick"></div></div>'
     + '</div>';
 }
 
 // Les couleurs du design sont des tokens limités au plugin (pas de :root) pour ne pas
 // toucher au thème du jeu.
 const RECAP_CSS = [
-  '.mi-panel, .mi-recap {',
+  '.mi-panel, .mi-recap, .mi-settings, .mi-settings-button {',
   '  --mi-bg: #0f262c; --mi-card: #143239; --mi-border: #1f3d44;',
   '  --mi-avatar-bg: #1e4a54; --mi-avatar-ring: #2b5f6b;',
   '  --mi-text: #ffffff; --mi-text-2: #cfe2e6; --mi-muted: #8fa9ae; --mi-faint: #5f7c82;',
@@ -235,6 +295,29 @@ const RECAP_CSS = [
     + ' max-height: 70vh; overflow-y: auto; z-index: 9000; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }',
   '.rightDetail > .mi-recap { box-sizing: border-box; max-width: 760px; padding: 20px; background: var(--mi-bg);'
     + ' border-radius: var(--mi-radius); }',
+  '.mi-settings { box-sizing: border-box; max-width: 760px; padding: 20px; background: var(--mi-bg);'
+    + ' border-radius: var(--mi-radius); display: flex; flex-direction: column; gap: 12px; }',
+  '.mi-settings-title { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;'
+    + ' color: var(--mi-text-2); }',
+  '.mi-settings-block { margin: 0; padding: 8px 20px; background: var(--mi-card); border: 1px solid var(--mi-border);'
+    + ' border-radius: var(--mi-radius); }',
+  '.mi-settings-block legend { padding: 0 4px; font-size: 12px; font-weight: 700; color: var(--mi-muted); }',
+  '.mi-setting { display: flex; align-items: center; gap: 12px; min-height: 44px; border-top: 1px solid var(--mi-border);'
+    + ' cursor: pointer; }',
+  '.mi-settings-block legend + .mi-setting { border-top: none; }',
+  '.mi-setting-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }',
+  '.mi-setting-label { font-size: 14px; color: var(--mi-text); }',
+  '.mi-setting-help { font-size: 12px; color: var(--mi-muted); }',
+  '.mi-setting input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--mi-good); }',
+  '.mi-setting input[type="number"] { width: 80px; padding: 4px 8px; background: var(--mi-bg); color: var(--mi-text);'
+    + ' border: 1px solid var(--mi-border); border-radius: 6px; font: inherit; }',
+  '.mi-settings-note { margin: 0; font-size: 12px; color: var(--mi-muted); }',
+  '.mi-settings-status { margin: 0; min-height: 1.4em; font-size: 12px; font-weight: 600; color: var(--mi-good); }',
+  '.mi-settings-status.is-error { color: var(--mi-bad); }',
+  '.mi-settings-button { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 8px; padding: 8px 12px;'
+    + ' background: var(--mi-card); color: var(--mi-text-2); border: 1px solid var(--mi-border); border-radius: 8px;'
+    + ' font: inherit; cursor: pointer; }',
+  '.mi-settings-button.active { border-color: var(--mi-good); color: var(--mi-text); }',
   '.mi-history-list li { display: flex; gap: 8px; }',
   '.mi-history-date { color: var(--color-2); }',
   // Écran ou colonne étroite : identité au-dessus des stats.
@@ -251,6 +334,7 @@ module.exports = {
   renderFloating,
   renderHistoryList,
   renderHistoryPageShell,
+  renderSettingsForm,
   resolveAvatarsJs,
   RECAP_CSS,
 };

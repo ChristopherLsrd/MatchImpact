@@ -205,3 +205,10 @@ test('un échec d\'écriture de l\'historique ne masque pas le panneau (show:end
   assert.equal(logger.errors[0][0], 'archive');
   assert.equal(tracker.hasSnapshot(), false);
 });
+
+test('transmet la langue de l\'écran de fin à la vue', () => {
+  const { tracker, view } = setup();
+  tracker.onShowStarted(STARTED);
+  tracker.onSummaryShown({ showID: 77, locale: 'fr' });
+  assert.deepEqual(view.summaryLocales, ['fr']);
+});

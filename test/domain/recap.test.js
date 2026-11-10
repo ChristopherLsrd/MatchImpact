@@ -24,10 +24,10 @@ function recapFor(beforeStats, afterStats, options = OPTS, extraBefore = {}, ext
   );
 }
 
-test('rapporte une stat modifiée avec avant, après, écart et libellé', () => {
+test('rapporte une stat modifiée avec avant, après et écart', () => {
   const r = recapFor({ entertainment: 62 }, { entertainment: 63.5 });
   assert.deepEqual(r.workers[0].changes, [
-    { key: 'entertainment', label: 'Divertissement', before: 62, after: 63.5, delta: 1.5, inverted: false },
+    { key: 'entertainment', before: 62, after: 63.5, delta: 1.5, inverted: false },
   ]);
 });
 
@@ -49,7 +49,7 @@ test('ignore un groupe désactivé', () => {
 test('traite null comme 0', () => {
   const r = recapFor({ momentum: null }, { momentum: 5 });
   assert.deepEqual(r.workers[0].changes[0], {
-    key: 'momentum', label: 'Momentum', before: 0, after: 5, delta: 5, inverted: false,
+    key: 'momentum', before: 0, after: 5, delta: 5, inverted: false,
   });
 });
 
