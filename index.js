@@ -34,7 +34,7 @@ module.exports = {
     const roster = createSqlRosterReader((sql, params) => api.database.query(sql, params));
     const history = createStorageHistoryStore(api.storage);
     const view = createGameRecapView(api.ui, logger);
-    const gameState = createGameState(api.game);
+    const gameState = createGameState(api.game, (sql, params) => api.database.query(sql, params));
 
     const tracker = createShowTracker({ roster, history, view, settings, gameState, logger });
     const queries = createHistoryQueries({ history, logger });

@@ -21,7 +21,7 @@ Ces faits ont été vérifiés dans le guide des plugins et dans `resources/app.
 5. **`show:started` n'est émis que par l'écran de booking du joueur** (`Booking.startShow`). Les shows des promotions IA ne le déclenchent pas.
 6. **Écran de résultats** : page `#bookingResults`. L'écran de fin est `.bookingResultsFinalSummary` (masqué par `display:none` jusqu'à son ouverture). La colonne de droite est `.br-summary-side`, qui contient l'indicateur de popularité natif `.showPopGain`.
 7. **Dossier des plugins sous Windows** : `%APPDATA%/ProWrestlingSimulator/plugins/` (et non `Pro Wrestling Sim`).
-8. **Promotion du joueur** : `api.game.getState().promotionId`.
+8. **Promotion du joueur** : `api.game.getState().promotionId` en priorité. Le jeu lit `saveInfo.promotionID`, colonne absente des sauvegardes réelles, donc cette valeur vaut `null` (constaté au premier test en jeu). L'adapter se replie alors sur `SELECT saveUserPromotion FROM saveInfo LIMIT 1`.
 
 Conséquence : le récap porte sur l'ensemble du show (état avant / état après), pas sur chaque segment. Il n'y a pas de notification par segment (décision du brainstorming).
 
@@ -49,7 +49,7 @@ src/
     StorageHistoryStore.js         port HistoryStore  ← api.storage
     GameRecapView.js               port RecapView     ← api.ui (widgets, executeJS, injectCSS)
     GameSettings.js                port Settings      ← api.settings (+ déclaration du schéma)
-    GameState.js                   port GameState     ← api.game.getState()
+    GameState.js                   port GameState     ← api.game.getState(), repli saveInfo.saveUserPromotion
     summaryWatcher.js              script renderer (MutationObserver) + écoute IPC
     historyPage.js                 page + entrée de menu + script renderer
 test/
@@ -101,7 +101,7 @@ Le plugin tourne dans le processus principal (Node, CommonJS) : `index.js` charg
 
 ### 1. `show:started` → photo de départ
 
-- Si `onlyMyPromotion` est actif et que `event.data.promotionID !== getState().promotionId`, le show est ignoré.
+- Si `onlyMyPromotion` est actif et que `event.data.promotionID` diffère de la promotion du joueur (`GameState.playerPromotionId()`), le show est ignoré.
 - Sinon, `ShowTracker.onShowStarted` appelle `RosterReader.readRoster(promotionID)`, qui lit en une requête tous les lutteurs sous contrat actif avec la promotion (`contracts.promotionID = ? AND contracts.expired = 0`), avec les colonnes suivies de `workers` et `momentum`, `morale` du contrat.
 - Puis une seconde requête lit les relations entre ces lutteurs : `SELECT worker1, worker2, relationship FROM relationships WHERE worker1 IN (…) AND worker2 IN (…)`, paramètres `?` générés selon la taille de la liste.
 - La photo est gardée en mémoire par `ShowTracker` : `{ promotionID, showName, date, workers: Map<workerID, row>, relations: Map<"min-max", value> }`. Elle remplace toute photo précédente.
