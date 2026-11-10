@@ -107,7 +107,7 @@ function createShowTracker({ roster, history, view, settings, gameState, logger 
       if (showID === null) return;
       const recap = buildRecap(showID, roster.readCard(showID));
       current.recapDone = true;
-      if (settings.get('showEndOfShowPanel')) view.showInSummary(recap);
+      if (settings.get('showEndOfShowPanel')) view.showInSummary(recap, payload && payload.locale);
       archive(recap);
     } catch (e) {
       logger.error('summary-shown', e);

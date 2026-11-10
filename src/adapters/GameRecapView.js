@@ -35,7 +35,9 @@ function createGameRecapView(ui, logger) {
       .catch((e) => { logger.error('showInSummary', e); showFloating(recap); });
   }
 
-  return { showInSummary, showFloating };
+  function setLocale() {}
+
+  return { showInSummary, showFloating, setLocale };
 }
 
 module.exports = { createGameRecapView };
