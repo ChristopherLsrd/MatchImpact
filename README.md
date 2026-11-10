@@ -8,6 +8,8 @@ Le plugin est en lecture seule : il n'écrit jamais en base et ne modifie pas le
 
 Le plugin s'affiche en français si le jeu est en français, et en anglais pour toutes les autres langues.
 
+https://steamcommunity.com/sharedfiles/filedetails/?id=3837501816
+
 ## Fonctionnement
 
 - **Avant le show** (`show:started`) : le plugin prend une photo des stats de ton roster.
