@@ -1,5 +1,7 @@
 'use strict';
 
+const { resolveLocale, t, statLabel } = require('./i18n');
+
 // Rendu du récap selon la maquette match-impact-cards.html (MATCH_IMPACT_DESIGN.md) :
 // une card par catcheur, des lignes de stats à colonnes fixes, une pastille d'écart colorée.
 
@@ -56,37 +58,39 @@ function renderStat(label, before, after, delta, good) {
     + '</div>';
 }
 
-function renderInjury(injury) {
-  const text = `${injury.type}${injury.healDate ? ` (retour ${injury.healDate})` : ''}`;
-  return '<div class="mi-stat mi-injury"><span class="mi-label">Blessure</span>'
+function renderInjury(injury, locale) {
+  const text = injury.healDate
+    ? t(locale, 'injuryReturn', { type: injury.type, date: injury.healDate })
+    : String(injury.type);
+  return `<div class="mi-stat mi-injury"><span class="mi-label">${escapeHtml(t(locale, 'injury'))}</span>`
     + `<span class="mi-injury-text">${escapeHtml(text)}</span></div>`;
 }
 
-function renderCard(worker, segments) {
+function renderCard(worker, segments, locale) {
   const match = worker.segments
     .map((i) => (segments[i] ? segments[i].name : ''))
     .filter(Boolean)
     .join(' · ');
   const stats = worker.changes
-    .map((c) => renderStat(c.label, c.before, c.after, c.delta, c.inverted ? c.delta < 0 : c.delta > 0))
+    .map((c) => renderStat(statLabel(locale, c.key), c.before, c.after, c.delta, c.inverted ? c.delta < 0 : c.delta > 0))
     .join('');
   return '<article class="mi-card">'
     + '<div class="mi-id">'
-    + `<div class="mi-avatar" role="img" aria-label="Photo de ${escapeHtml(worker.name)}"`
+    + `<div class="mi-avatar" role="img" aria-label="${escapeHtml(t(locale, 'photoOf', { name: worker.name }))}"`
     + ` data-mi-picture="${escapeHtml(worker.picture)}" data-mi-contract-picture="${escapeHtml(worker.contractPicture)}">`
     + `${escapeHtml(initials(worker.name))}</div>`
     + '<div class="mi-id-text">'
     + `<h3 class="mi-name">${escapeHtml(worker.name)}</h3>`
     + `<p class="mi-match" title="${escapeHtml(match)}">${escapeHtml(match)}</p>`
     + '</div></div>'
-    + `<div class="mi-stats">${stats}${worker.injury ? renderInjury(worker.injury) : ''}</div>`
+    + `<div class="mi-stats">${stats}${worker.injury ? renderInjury(worker.injury, locale) : ''}</div>`
     + '</article>';
 }
 
-function renderRelations(relations) {
+function renderRelations(relations, locale) {
   if (!relations.length) return '';
   return '<article class="mi-card mi-relations">'
-    + '<div class="mi-id"><div class="mi-id-text"><h3 class="mi-name">Relations</h3></div></div>'
+    + `<div class="mi-id"><div class="mi-id-text"><h3 class="mi-name">${escapeHtml(t(locale, 'relations'))}</h3></div></div>`
     + '<div class="mi-stats">'
     + relations.map((r) => renderStat(`${r.name1} ↔ ${r.name2}`, r.before, r.after, r.delta, r.delta > 0)).join('')
     + '</div></article>';
@@ -96,41 +100,46 @@ function shownWorkers(recap) {
   return recap.workers.filter((w) => w.changes.length || w.injury);
 }
 
-function renderRecapBody(recap) {
+function renderRecapBody(recap, locale) {
+  const lang = resolveLocale(locale);
   const show = `<p class="mi-show">${escapeHtml(recap.showName)}${recap.date ? ` · ${escapeHtml(recap.date)}` : ''}</p>`;
   const workers = shownWorkers(recap);
   const relations = recap.relations || [];
   const content = workers.length || relations.length
-    ? workers.map((w) => renderCard(w, recap.segments)).join('') + renderRelations(relations)
-    : '<div class="noResults">Aucun changement notable pendant ce show.</div>';
-  return `<div class="mi-recap">${show}${content}</div>`;
+    ? workers.map((w) => renderCard(w, recap.segments, lang)).join('') + renderRelations(relations, lang)
+    : `<div class="noResults">${escapeHtml(t(lang, 'noChange'))}</div>`;
+  return `<div class="mi-recap" lang="${lang}">${show}${content}</div>`;
 }
 
-function renderCount(recap) {
+function renderCount(recap, locale) {
   const n = shownWorkers(recap).length;
-  return `<span class="mi-count">${n} ${n > 1 ? 'catcheurs' : 'catcheur'}</span>`;
+  return `<span class="mi-count">${escapeHtml(t(locale, n > 1 ? 'wrestlers.many' : 'wrestlers.one', { n }))}</span>`;
 }
 
-function renderHeader(recap, button) {
+function renderHeader(recap, button, locale) {
   return '<header class="mi-header"><h2>Match Impact</h2>'
-    + `<div class="mi-header-tools">${renderCount(recap)}${button}</div></header>`;
+    + `<div class="mi-header-tools">${renderCount(recap, locale)}${button}</div></header>`;
 }
 
-function renderPanel(recap) {
-  const toggle = '<button type="button" class="mi-toggle clickable" title="Replier" aria-label="Replier"'
+function renderPanel(recap, locale) {
+  const lang = resolveLocale(locale);
+  const label = escapeHtml(t(lang, 'collapse'));
+  const toggle = `<button type="button" class="mi-toggle clickable" title="${label}" aria-label="${label}"`
     + ' onclick="this.closest(\'.mi-panel\').classList.toggle(\'mi-collapsed\')">▾</button>';
-  return `<section class="mi-panel" ${PLUGIN_ATTR} aria-label="Match Impact">`
-    + renderHeader(recap, toggle)
-    + renderRecapBody(recap)
+  return `<section class="mi-panel" ${PLUGIN_ATTR} aria-label="Match Impact" lang="${lang}">`
+    + renderHeader(recap, toggle, lang)
+    + renderRecapBody(recap, lang)
     + '</section>';
 }
 
-function renderFloating(recap) {
-  const close = '<button type="button" class="mi-close clickable" title="Fermer" aria-label="Fermer"'
+function renderFloating(recap, locale) {
+  const lang = resolveLocale(locale);
+  const label = escapeHtml(t(lang, 'close'));
+  const close = `<button type="button" class="mi-close clickable" title="${label}" aria-label="${label}"`
     + ' onclick="this.closest(\'.mi-floating\').remove()">✕</button>';
-  return `<section class="mi-panel mi-floating" id="mi-floating" ${PLUGIN_ATTR} aria-label="Match Impact">`
-    + renderHeader(recap, close)
-    + renderRecapBody(recap)
+  return `<section class="mi-panel mi-floating" id="mi-floating" ${PLUGIN_ATTR} aria-label="Match Impact" lang="${lang}">`
+    + renderHeader(recap, close, lang)
+    + renderRecapBody(recap, lang)
     + '</section>';
 }
 
@@ -157,8 +166,8 @@ function resolveAvatarsJs(rootExpr) {
 })(${rootExpr});`;
 }
 
-function renderHistoryList(items) {
-  if (!items.length) return '<div class="noResults">Aucun show enregistré pour l\'instant.</div>';
+function renderHistoryList(items, locale) {
+  if (!items.length) return `<div class="noResults">${escapeHtml(t(locale, 'historyEmpty'))}</div>`;
   return '<ul class="mi-history-list">'
     + items.map((i) => `<li class="clickable" data-mi-index="${Number(i.index)}">`
       + `<span class="mi-history-date">${escapeHtml(i.date)}</span> `
@@ -166,10 +175,13 @@ function renderHistoryList(items) {
     + '</ul>';
 }
 
+// Coquille sans texte : le script de page la remplit dans la langue du jeu (handler page-texts).
 function renderHistoryPageShell() {
   return '<div class="leftRightSplit mi-history">'
-    + '<div class="leftListContainer"><div class="leftList" id="mi-history-list"></div></div>'
-    + '<div class="rightDetail" id="mi-history-detail"><div class="noResults">Choisis un show dans la liste.</div></div>'
+    + '<div class="leftListContainer">'
+    + '<button type="button" class="mi-settings-button clickable" id="mi-settings-button">⚙ <span class="mi-settings-label"></span></button>'
+    + '<div class="leftList" id="mi-history-list"></div></div>'
+    + '<div class="rightDetail" id="mi-history-detail"><div class="noResults mi-history-pick"></div></div>'
     + '</div>';
 }
 
