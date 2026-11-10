@@ -13,7 +13,8 @@ const WATCH_SCRIPT = `(function () { try {
     if (visible && !wasVisible) {
       document.querySelectorAll('#bookingResults .mi-panel').forEach(function (el) { el.remove(); });
       var showID = (typeof Booking !== 'undefined' && Booking && Booking.currentShow != null) ? Number(Booking.currentShow) : null;
-      plugins.send('match-impact', '${CHANNEL}', { showID: isFinite(showID) ? showID : null });
+      var locale = (typeof I18n !== 'undefined' && I18n && I18n.locale) ? String(I18n.locale) : null;
+      plugins.send('match-impact', '${CHANNEL}', { showID: isFinite(showID) ? showID : null, locale: locale });
     }
     wasVisible = visible;
   }
