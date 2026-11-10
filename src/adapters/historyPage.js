@@ -22,7 +22,7 @@ const PAGE_SCRIPT = `(function () { try {
           item.classList.add('active');
           plugins.invoke('match-impact', 'recap-html', Number(item.getAttribute('data-mi-index'))).then(function (recapHtml) {
             detail.innerHTML = recapHtml;
-          });
+          }).catch(function (e) { console.error('[match-impact] récap', e); });
         };
       }).catch(function (e) { console.error('[match-impact] historique', e); });
     }
@@ -35,8 +35,13 @@ function createHistoryPage({ ui, ipc, queries, logger }) {
   function start() {
     ipc.handle('history-list-html', () => renderHistoryList(queries.listHistory()));
     ipc.handle('recap-html', (event, index) => {
-      const recap = queries.getRecap(index);
-      return recap ? renderRecapBody(recap) : '<div class="noResults">Récap introuvable.</div>';
+      try {
+        const recap = queries.getRecap(index);
+        return recap ? renderRecapBody(recap) : '<div class="noResults">Récap introuvable.</div>';
+      } catch (e) {
+        logger.error('recap-html', e);
+        return '<div class="noResults">Récap illisible.</div>';
+      }
     });
     ui.addPage({
       id: PAGE_ID,
@@ -53,7 +58,11 @@ function createHistoryPage({ ui, ipc, queries, logger }) {
     Promise.resolve(ui.executeJS(STOP_SCRIPT)).catch((e) => logger.error('historyPage.stop', e));
   }
 
-  return { start, stop };
+  function reinject() {
+    Promise.resolve(ui.executeJS(PAGE_SCRIPT)).catch((e) => logger.error('historyPage.reinject', e));
+  }
+
+  return { start, stop, reinject };
 }
 
 module.exports = { createHistoryPage };
