@@ -2,7 +2,7 @@
   "id": "match-impact",
   "name": "Match Impact",
   "version": "1.0.0",
-  "description": "Récap des stats en hausse et en baisse après chaque segment et chaque show.",
+  "description": "Récap des stats modifiées de chaque lutteur à la fin de chaque show, avec historique.",
   "author": "",
   "main": "index.js",
   "permissions": ["events", "database"]
