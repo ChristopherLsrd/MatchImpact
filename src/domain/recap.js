@@ -72,6 +72,8 @@ function computeWorkers(beforeById, afterById, card, options) {
       segments: card.segmentsByWorker.get(id),
       changes: statChanges(beforeRow, afterRow, stats, options.minDelta),
       injury: newInjury(beforeRow, afterRow),
+      picture: afterRow.picture || null,
+      contractPicture: afterRow.contractPicture || null,
     });
   }
   return workers;

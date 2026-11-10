@@ -4,7 +4,7 @@ const { STATS } = require('../domain/stats');
 const STAT_COLUMNS = STATS.map((s) => `${s.table === 'contracts' ? 'c' : 'w'}.${s.key}`);
 
 const SQL = Object.freeze({
-  SELECT_WORKERS: `SELECT w.workerID, w.name, w.injuryType, w.injuryHealDate, ${STAT_COLUMNS.join(', ')} `
+  SELECT_WORKERS: `SELECT w.workerID, w.name, w.injuryType, w.injuryHealDate, w.picture, c.contractPicture, ${STAT_COLUMNS.join(', ')} `
     + 'FROM workers w JOIN contracts c ON c.workerID = w.workerID',
   ORDER_WORKERS: 'ORDER BY w.workerID, c.contractID',
   CARD: 'SELECT s.segmentID, s.segmentType, s.segmentName, s.rating, o.workerID, '
@@ -31,6 +31,12 @@ function toNullableNumber(value) {
   return Number.isNaN(n) ? null : n;
 }
 
+function toNullableText(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text === '' ? null : text;
+}
+
 function toWorkerRow(row) {
   const stats = {};
   for (const s of STATS) stats[s.key] = toNullableNumber(row[s.key]);
@@ -40,6 +46,8 @@ function toWorkerRow(row) {
     stats,
     injuryType: row.injuryType === undefined ? null : row.injuryType,
     injuryHealDate: row.injuryHealDate === undefined ? null : row.injuryHealDate,
+    picture: toNullableText(row.picture),
+    contractPicture: toNullableText(row.contractPicture),
   };
 }
 
